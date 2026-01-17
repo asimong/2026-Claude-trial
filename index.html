@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RegenCHOICE Question Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>RegenCHOICE Question Manager</h1>
+      <p class="subtitle">Create, manage, and validate questions for your RegenCHOICE system</p>
+    </header>
+
+    <nav>
+      <button id="navList" class="active">Question List</button>
+      <button id="navCreate">Create Question</button>
+      <button id="navValidate">Validate</button>
+      <div class="nav-actions">
+        <button id="exportBtn" class="btn-secondary">Export</button>
+        <button id="importBtn" class="btn-secondary">Import</button>
+        <input type="file" id="importFile" accept=".json" style="display: none;">
+      </div>
+    </nav>
+
+    <main>
+      <!-- List View -->
+      <div id="listView" class="view active">
+        <div class="view-header">
+          <h2>All Questions</h2>
+        </div>
+        <div id="questionList"></div>
+      </div>
+
+      <!-- Create/Edit View -->
+      <div id="createView" class="view">
+        <div class="view-header">
+          <h2 id="formTitle">Create New Question</h2>
+        </div>
+        <form id="questionForm">
+          <div class="form-section">
+            <h3>Question Type</h3>
+            <div class="form-group">
+              <label for="questionType">Select Question Type *</label>
+              <select id="questionType" required>
+                <option value="AORBQ">AORBQ - Preference between two alternatives</option>
+                <option value="FACTQ">FACTQ - Factual Yes/No/Don't Know</option>
+                <option value="LEVLQ">LEVLQ - Ordered levels</option>
+                <option value="LIKSQ">LIKSQ - Likert scale</option>
+                <option value="OPTSQ">OPTSQ - Multiple choice options</option>
+                <option value="RANGQ">RANGQ - Numeric range</option>
+                <option value="TRIPQ">TRIPQ - Triple choice with midpoint</option>
+              </select>
+              <small id="typeDescription">A preference between two alternatives, A or B</small>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>Common Fields</h3>
+            <div class="form-group">
+              <label for="qLang">Language *</label>
+              <input type="text" id="qLang" value="en" required maxlength="10">
+              <small>Language code (e.g., en, es, fr)</small>
+            </div>
+
+            <div class="form-group">
+              <label for="qTitle">Question Title *</label>
+              <input type="text" id="qTitle" required maxlength="80">
+              <small>Short text, max 80 characters</small>
+            </div>
+
+            <div class="form-group">
+              <label for="qDesc">Question Description</label>
+              <textarea id="qDesc" rows="3"></textarea>
+              <small>Optional longer explanation</small>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="qRelB">
+                Is this a relational question?
+              </label>
+              <small>Check if question relates two choosers, uncheck if it's a property</small>
+            </div>
+
+            <div class="form-group" id="qniContainer">
+              <label for="qnI">Number of Items (QnI) *</label>
+              <input type="number" id="qnI" value="5" min="2" max="10">
+              <small>For itemized questions (2-10). Default: 5</small>
+            </div>
+
+            <div class="form-group">
+              <label for="qLearn">Learning Resource Link</label>
+              <input type="url" id="qLearn" placeholder="https://...">
+              <small>Optional link to explanatory page</small>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>Type-Specific Fields</h3>
+            <div id="typeSpecificFields"></div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="submitBtn" class="btn-primary">Create Question</button>
+            <button type="button" onclick="showView('list')" class="btn-secondary">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Validate View -->
+      <div id="validateView" class="view">
+        <div class="view-header">
+          <h2>Validation Results</h2>
+        </div>
+        <div id="validationResults"></div>
+      </div>
+    </main>
+
+    <!-- Modal for viewing question details -->
+    <div id="viewModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Question Details</h2>
+          <button onclick="closeModal()" class="close-btn">&times;</button>
+        </div>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+
+    <footer>
+      <p>RegenCHOICE Question Management System</p>
+      <p class="footer-links">
+        <a href="https://wiki.simongrant.org/doku.php/ch:index" target="_blank">Documentation</a> |
+        <a href="https://wiki.simongrant.org/doku.php/ch:qs:here" target="_blank">Question Specs</a>
+      </p>
+    </footer>
+  </div>
+
+  <script src="question-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
