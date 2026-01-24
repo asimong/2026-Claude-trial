@@ -27,9 +27,30 @@ The app supports all 7 RegenCHOICE question structures:
 
 1. Open `index.html` in a modern web browser
 2. The app runs entirely client-side - no server needed
-3. Data is stored in your browser's localStorage
+3. Choose to load existing questions from JSON file(s) or start fresh
+4. Questions are saved to JSON files that can be shared with collaborators
 
 ## Usage
+
+### Working with Files
+
+On startup, you'll see a welcome screen with two options:
+- **Load from File(s)**: Open existing question files (select multiple to merge)
+- **Start Fresh**: Begin with an empty question set
+
+File operations available in the navigation:
+- **Save**: Save to current file (downloads as JSON)
+- **Save As**: Save to a new filename
+- **Load**: Load from one or more files (replaces current questions)
+- **Merge**: Add questions from additional file(s) without replacing existing ones
+
+**Default filename**: `regenchoice-questions.json` (customizable via Save As)
+
+**Collaborative workflow**:
+1. Share your JSON file with collaborators
+2. They can load it, make changes, and save
+3. Merge multiple contributors' files together
+4. The app automatically prevents duplicate questions (by QID)
 
 ### Creating Questions
 
@@ -38,6 +59,9 @@ The app supports all 7 RegenCHOICE question structures:
 3. Fill in the common fields (title, description, etc.)
 4. Complete the type-specific fields
 5. Click "Create Question" to save
+6. Remember to use "Save" to download your updated file
+
+**Note**: All text fields automatically trim whitespace from both ends
 
 ### Managing Questions
 
@@ -51,11 +75,6 @@ The app supports all 7 RegenCHOICE question structures:
 1. Click "Validate" in the navigation
 2. See which questions pass validation
 3. View specific errors for invalid questions
-
-### Export/Import
-
-- **Export**: Download all questions as JSON
-- **Import**: Upload a previously exported JSON file
 
 ## Data Structure
 
@@ -80,7 +99,10 @@ Each question type has unique fields in `QDetails`. See the [RegenCHOICE documen
 
 - Pure HTML/CSS/JavaScript
 - No dependencies or frameworks
-- localStorage for data persistence
+- File-based storage (JSON) for data portability and collaboration
+- Automatic whitespace trimming on all text inputs
+- Support for loading and merging multiple files
+- Unsaved changes warning
 - Responsive design for mobile and desktop
 
 ## Resources

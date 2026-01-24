@@ -18,11 +18,22 @@
       <button id="navCreate">Create Question</button>
       <button id="navValidate">Validate</button>
       <div class="nav-actions">
-        <button id="exportBtn" class="btn-secondary">Export</button>
-        <button id="importBtn" class="btn-secondary">Import</button>
-        <input type="file" id="importFile" accept=".json" style="display: none;">
+        <button id="saveBtn" class="btn-file" title="Save to current file">Save</button>
+        <button id="saveAsBtn" class="btn-file" title="Save to a new file">Save As...</button>
+        <button id="loadBtn" class="btn-file" title="Load from file(s)">Load...</button>
+        <button id="mergeBtn" class="btn-file" title="Merge from additional file(s)">Merge...</button>
+        <input type="file" id="loadFile" accept=".json" multiple style="display: none;">
+        <input type="file" id="mergeFile" accept=".json" multiple style="display: none;">
       </div>
     </nav>
+
+    <!-- Status Bar -->
+    <div id="statusBar" class="status-bar">
+      <span class="status-item">File: <strong class="current-filename">regenchoice-questions.json</strong></span>
+      <span class="status-item">|</span>
+      <span class="status-item question-count">0 questions</span>
+      <span class="status-message"></span>
+    </div>
 
     <main>
       <!-- List View -->
@@ -126,6 +137,33 @@
           <button onclick="closeModal()" class="close-btn">&times;</button>
         </div>
         <div id="modalContent"></div>
+      </div>
+    </div>
+
+    <!-- Startup Modal for loading files -->
+    <div id="startupModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Welcome to RegenCHOICE Question Manager</h2>
+        </div>
+        <div class="modal-body">
+          <p>How would you like to begin?</p>
+          <div class="startup-options">
+            <div class="startup-option">
+              <h3>Load Existing Questions</h3>
+              <p>Open one or more JSON files containing questions.</p>
+              <p><small>Tip: Select multiple files to merge them together</small></p>
+              <button id="startupLoadBtn" class="btn-primary">Load from File(s)...</button>
+              <input type="file" id="startupLoadFile" accept=".json" multiple style="display: none;">
+            </div>
+            <div class="startup-option">
+              <h3>Start Fresh</h3>
+              <p>Begin with an empty question set.</p>
+              <p><small>You can load files later using the Load button</small></p>
+              <button id="startupNewBtn" class="btn-secondary">Start with Empty Set</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

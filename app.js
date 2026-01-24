@@ -1,49 +1,94 @@
 /**
  * RegenCHOICE Question Management App
+ * File-based storage version
  */
+
+// Default filename for question storage
+const DEFAULT_FILENAME = 'regenchoice-questions.json';
 
 class QuestionManager {
   constructor() {
     this.questions = [];
     this.currentQuestion = null;
     this.editingIndex = -1;
-    this.loadQuestions();
+    this.currentFilename = DEFAULT_FILENAME;
+    this.unsavedChanges = false;
   }
 
-  // Storage methods
-  loadQuestions() {
-    const stored = localStorage.getItem('regenchoice_questions');
-    if (stored) {
-      try {
-        this.questions = JSON.parse(stored);
-      } catch (e) {
-        console.error('Error loading questions:', e);
-        this.questions = [];
-      }
-    }
+  // File operations
+  saveToFile(filename) {
+    const dataStr = JSON.stringify(this.questions, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || this.currentFilename;
+    link.click();
+    URL.revokeObjectURL(url);
+    this.unsavedChanges = false;
+    updateStatus(`Saved to ${filename || this.currentFilename}`);
   }
 
-  saveQuestions() {
-    localStorage.setItem('regenchoice_questions', JSON.stringify(this.questions));
+  loadFromFile(file, merge = false) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            if (merge) {
+              // Merge: add new questions, avoiding duplicates by QID
+              const existingQIDs = new Set(this.questions.map(q => q.QID));
+              const newQuestions = imported.filter(q => !existingQIDs.has(q.QID));
+              this.questions.push(...newQuestions);
+              updateStatus(`Merged ${newQuestions.length} new questions from ${file.name}`);
+              resolve({ count: newQuestions.length, merged: true });
+            } else {
+              // Replace: load as new file
+              this.questions = imported;
+              this.currentFilename = file.name;
+              this.unsavedChanges = false;
+              updateStatus(`Loaded ${imported.length} questions from ${file.name}`);
+              resolve({ count: imported.length, merged: false });
+            }
+          } else {
+            reject('Invalid file format: expected an array of questions');
+          }
+        } catch (err) {
+          reject('Error parsing JSON: ' + err.message);
+        }
+      };
+      reader.onerror = () => reject('Error reading file');
+      reader.readAsText(file);
+    });
+  }
+
+  loadFromMultipleFiles(files) {
+    return Promise.all(Array.from(files).map(file => this.loadFromFile(file, true)))
+      .then(results => {
+        const totalMerged = results.reduce((sum, r) => sum + r.count, 0);
+        updateStatus(`Merged ${totalMerged} questions from ${files.length} files`);
+        return totalMerged;
+      });
   }
 
   // CRUD operations
   addQuestion(question) {
     this.questions.push(question);
-    this.saveQuestions();
+    this.markUnsaved();
   }
 
   updateQuestion(index, question) {
     if (index >= 0 && index < this.questions.length) {
       this.questions[index] = question;
-      this.saveQuestions();
+      this.markUnsaved();
     }
   }
 
   deleteQuestion(index) {
     if (index >= 0 && index < this.questions.length) {
       this.questions.splice(index, 1);
-      this.saveQuestions();
+      this.markUnsaved();
     }
   }
 
@@ -55,37 +100,9 @@ class QuestionManager {
     return this.questions;
   }
 
-  exportQuestions() {
-    const dataStr = JSON.stringify(this.questions, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'regenchoice-questions.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  importQuestions(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const imported = JSON.parse(e.target.result);
-          if (Array.isArray(imported)) {
-            this.questions = imported;
-            this.saveQuestions();
-            resolve(imported.length);
-          } else {
-            reject('Invalid file format');
-          }
-        } catch (err) {
-          reject('Error parsing JSON: ' + err.message);
-        }
-      };
-      reader.onerror = () => reject('Error reading file');
-      reader.readAsText(file);
-    });
+  markUnsaved() {
+    this.unsavedChanges = true;
+    updateStatus(`Unsaved changes (${this.questions.length} questions)`);
   }
 
   validateAll() {
@@ -105,7 +122,7 @@ let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new QuestionManager();
   initializeUI();
-  showView('list');
+  showStartupModal();
 });
 
 // UI Management
@@ -123,26 +140,135 @@ function initializeUI() {
   // Form submission
   document.getElementById('questionForm').addEventListener('submit', handleFormSubmit);
 
-  // Export/Import
-  document.getElementById('exportBtn').addEventListener('click', () => {
-    app.exportQuestions();
+  // File operations
+  document.getElementById('saveBtn').addEventListener('click', () => {
+    app.saveToFile(app.currentFilename);
   });
 
-  document.getElementById('importBtn').addEventListener('click', () => {
-    document.getElementById('importFile').click();
+  document.getElementById('saveAsBtn').addEventListener('click', () => {
+    showSaveAsDialog();
   });
 
-  document.getElementById('importFile').addEventListener('change', async (e) => {
-    if (e.target.files[0]) {
+  document.getElementById('loadBtn').addEventListener('click', () => {
+    document.getElementById('loadFile').click();
+  });
+
+  document.getElementById('loadFile').addEventListener('change', async (e) => {
+    if (e.target.files.length > 0) {
       try {
-        const count = await app.importQuestions(e.target.files[0]);
-        alert(`Successfully imported ${count} questions`);
+        if (e.target.files.length === 1) {
+          if (app.unsavedChanges && app.questions.length > 0) {
+            if (!confirm('You have unsaved changes. Load new file and discard changes?')) {
+              e.target.value = '';
+              return;
+            }
+          }
+          const result = await app.loadFromFile(e.target.files[0], false);
+          alert(`Successfully loaded ${result.count} questions from ${e.target.files[0].name}`);
+        } else {
+          // Multiple files - merge them
+          const total = await app.loadFromMultipleFiles(e.target.files);
+          alert(`Successfully merged ${total} questions from ${e.target.files.length} files`);
+        }
         showView('list');
+        e.target.value = '';
       } catch (err) {
-        alert('Import failed: ' + err);
+        alert('Load failed: ' + err);
+        e.target.value = '';
       }
     }
   });
+
+  document.getElementById('mergeBtn').addEventListener('click', () => {
+    document.getElementById('mergeFile').click();
+  });
+
+  document.getElementById('mergeFile').addEventListener('change', async (e) => {
+    if (e.target.files.length > 0) {
+      try {
+        const total = await app.loadFromMultipleFiles(e.target.files);
+        alert(`Successfully merged ${total} questions from ${e.target.files.length} file(s)`);
+        showView('list');
+        e.target.value = '';
+      } catch (err) {
+        alert('Merge failed: ' + err);
+        e.target.value = '';
+      }
+    }
+  });
+
+  // Warn before leaving with unsaved changes
+  window.addEventListener('beforeunload', (e) => {
+    if (app.unsavedChanges) {
+      e.preventDefault();
+      e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      return e.returnValue;
+    }
+  });
+}
+
+// Startup modal for initial file loading
+function showStartupModal() {
+  const modal = document.getElementById('startupModal');
+  modal.style.display = 'block';
+
+  document.getElementById('startupLoadBtn').onclick = () => {
+    document.getElementById('startupLoadFile').click();
+  };
+
+  document.getElementById('startupLoadFile').onchange = async (e) => {
+    if (e.target.files.length > 0) {
+      try {
+        if (e.target.files.length === 1) {
+          const result = await app.loadFromFile(e.target.files[0], false);
+          updateStatus(`Loaded ${result.count} questions from ${e.target.files[0].name}`);
+        } else {
+          const total = await app.loadFromMultipleFiles(e.target.files);
+          updateStatus(`Merged ${total} questions from ${e.target.files.length} files`);
+        }
+        modal.style.display = 'none';
+        showView('list');
+      } catch (err) {
+        alert('Load failed: ' + err);
+      }
+    }
+  };
+
+  document.getElementById('startupNewBtn').onclick = () => {
+    modal.style.display = 'none';
+    updateStatus('Started with empty question set');
+    showView('list');
+  };
+}
+
+// Save As dialog
+function showSaveAsDialog() {
+  const filename = prompt('Enter filename:', app.currentFilename);
+  if (filename) {
+    app.currentFilename = filename.endsWith('.json') ? filename : filename + '.json';
+    app.saveToFile(app.currentFilename);
+  }
+}
+
+// Status updates
+function updateStatus(message) {
+  const statusEl = document.getElementById('statusBar');
+  if (statusEl) {
+    const filenameEl = statusEl.querySelector('.current-filename');
+    const questionCountEl = statusEl.querySelector('.question-count');
+    const statusMsgEl = statusEl.querySelector('.status-message');
+
+    if (filenameEl) filenameEl.textContent = app.currentFilename;
+    if (questionCountEl) questionCountEl.textContent = `${app.questions.length} question${app.questions.length !== 1 ? 's' : ''}`;
+    if (statusMsgEl) statusMsgEl.textContent = message;
+
+    // Auto-hide status message after 3 seconds
+    if (statusMsgEl && message) {
+      setTimeout(() => {
+        statusMsgEl.textContent = '';
+      }, 3000);
+    }
+  }
 }
 
 function showView(viewName) {
@@ -496,18 +622,24 @@ function generateOptsqItems() {
   container.innerHTML = html;
 }
 
+// Helper function to get trimmed value from element
+function getTrimmedValue(elementId) {
+  const el = document.getElementById(elementId);
+  return el ? el.value.trim() : '';
+}
+
 function handleFormSubmit(e) {
   e.preventDefault();
 
   const type = document.getElementById('questionType').value;
   const question = createQuestion(type);
 
-  // Populate common fields
-  question.Lang = document.getElementById('qLang').value;
-  question.QTitle = document.getElementById('qTitle').value;
-  question.QDesc = document.getElementById('qDesc').value;
+  // Populate common fields (with whitespace trimming)
+  question.Lang = getTrimmedValue('qLang');
+  question.QTitle = getTrimmedValue('qTitle');
+  question.QDesc = getTrimmedValue('qDesc');
   question.QRelB = document.getElementById('qRelB').checked;
-  question.QLearn = document.getElementById('qLearn').value;
+  question.QLearn = getTrimmedValue('qLearn');
 
   if (type !== QUESTION_TYPES.FACTQ && type !== QUESTION_TYPES.RANGQ) {
     question.QnI = parseInt(document.getElementById('qnI').value);
@@ -519,19 +651,19 @@ function handleFormSubmit(e) {
     question.QID = original.QID;
   }
 
-  // Populate type-specific fields
+  // Populate type-specific fields (with whitespace trimming)
   switch(type) {
     case QUESTION_TYPES.AORBQ:
-      question.QDetails.QPref1 = document.getElementById('qPref1').value;
-      question.QDetails.QPref2 = document.getElementById('qPref2').value;
-      question.QDetails.QPrefer1 = document.getElementById('qPrefer1').value;
-      question.QDetails.QPrefer2 = document.getElementById('qPrefer2').value;
+      question.QDetails.QPref1 = getTrimmedValue('qPref1');
+      question.QDetails.QPref2 = getTrimmedValue('qPref2');
+      question.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
+      question.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
       break;
 
     case QUESTION_TYPES.LEVLQ:
       question.QDetails.QSchB = document.getElementById('qSchB').checked;
       if (question.QDetails.QSchB) {
-        question.QDetails.QScheme = document.getElementById('qScheme').value;
+        question.QDetails.QScheme = getTrimmedValue('qScheme');
         question.QDetails.items = [];
       } else {
         question.QDetails.items = [];
@@ -541,8 +673,8 @@ function handleFormSubmit(e) {
           const valEl = document.getElementById(`levlq_val_${i}`);
           if (shortEl) {
             question.QDetails.items.push({
-              QItemShort: shortEl.value,
-              QItemLong: longEl.value,
+              QItemShort: shortEl.value.trim(),
+              QItemLong: longEl.value.trim(),
               QItemVal: parseInt(valEl.value)
             });
           }
@@ -551,7 +683,7 @@ function handleFormSubmit(e) {
       break;
 
     case QUESTION_TYPES.LIKSQ:
-      question.QDetails.QPos = document.getElementById('qPos').value;
+      question.QDetails.QPos = getTrimmedValue('qPos');
       break;
 
     case QUESTION_TYPES.OPTSQ:
@@ -563,27 +695,27 @@ function handleFormSubmit(e) {
         const longEl = document.getElementById(`optsq_long_${i}`);
         if (shortEl) {
           question.QDetails.items.push({
-            QItemShort: shortEl.value,
-            QItemLong: longEl.value
+            QItemShort: shortEl.value.trim(),
+            QItemLong: longEl.value.trim()
           });
         }
       }
       break;
 
     case QUESTION_TYPES.RANGQ:
-      question.QDetails.QSUnit = document.getElementById('qsUnit').value;
+      question.QDetails.QSUnit = getTrimmedValue('qsUnit');
       question.QDetails.QSMin = parseFloat(document.getElementById('qsMin').value);
       question.QDetails.QSMax = parseFloat(document.getElementById('qsMax').value);
       question.QDetails.QSGran = parseFloat(document.getElementById('qsGran').value);
       break;
 
     case QUESTION_TYPES.TRIPQ:
-      question.QDetails.QPref1 = document.getElementById('qPref1').value;
-      question.QDetails.QPref2 = document.getElementById('qPref2').value;
-      question.QDetails.QMidP = document.getElementById('qMidP').value;
-      question.QDetails.QPrefer1 = document.getElementById('qPrefer1').value;
-      question.QDetails.QPrefer2 = document.getElementById('qPrefer2').value;
-      question.QDetails.QMiddle = document.getElementById('qMiddle').value;
+      question.QDetails.QPref1 = getTrimmedValue('qPref1');
+      question.QDetails.QPref2 = getTrimmedValue('qPref2');
+      question.QDetails.QMidP = getTrimmedValue('qMidP');
+      question.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
+      question.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
+      question.QDetails.QMiddle = getTrimmedValue('qMiddle');
       break;
   }
 
