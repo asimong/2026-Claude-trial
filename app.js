@@ -13,6 +13,7 @@ class QuestionManager {
     this.editingIndex = -1;
     this.currentFilename = DEFAULT_FILENAME;
     this.unsavedChanges = false;
+    this.currentEditingLang = 'en';  // Track which language is being edited
   }
 
   // File operations
@@ -308,21 +309,29 @@ function renderQuestionList() {
 
   let html = '<div class="question-cards">';
   questions.forEach((q, idx) => {
+    const langs = getQuestionLanguages(q);
+    const defaultLang = q.defaultLang || langs[0] || 'en';
+    const langData = getLanguageData(q, defaultLang);
+
+    const languageBadges = langs.map(lang =>
+      `<span class="lang-badge" title="${COMMON_LANGUAGES[lang] || lang}">${lang.toUpperCase()}</span>`
+    ).join('');
+
     html += `
       <div class="question-card">
         <div class="question-header">
           <span class="question-type-badge">${q.QStruct}</span>
           <span class="question-id">ID: ${q.QID}</span>
         </div>
-        <h3>${escapeHtml(q.QTitle || 'Untitled Question')}</h3>
-        <p class="question-desc">${escapeHtml(q.QDesc || 'No description')}</p>
+        <h3>${escapeHtml(langData?.QTitle || 'Untitled Question')}</h3>
+        <p class="question-desc">${escapeHtml(langData?.QDesc || 'No description')}</p>
         <div class="question-meta">
-          <span>Language: ${q.Lang}</span>
+          <span>Languages: ${languageBadges}</span>
           <span>Items: ${q.QnI}</span>
           <span>Relational: ${q.QRelB ? 'Yes' : 'No'}</span>
         </div>
         <div class="question-actions">
-          <button onclick="editQuestion(${idx})" class="btn-edit">Edit</button>
+          <button onclick="editQuestion(${idx}, '${defaultLang}')" class="btn-edit">Edit</button>
           <button onclick="viewQuestion(${idx})" class="btn-view">View</button>
           <button onclick="deleteQuestion(${idx})" class="btn-delete">Delete</button>
         </div>
@@ -333,16 +342,20 @@ function renderQuestionList() {
   container.innerHTML = html;
 }
 
-function editQuestion(index) {
+function editQuestion(index, lang) {
   app.editingIndex = index;
   const question = app.getQuestion(index);
   app.currentQuestion = JSON.parse(JSON.stringify(question)); // Deep copy
+  app.currentEditingLang = lang || question.defaultLang || 'en';
 
   showView('create');
-  populateForm(question);
+  populateForm(question, app.currentEditingLang);
 
   document.getElementById('formTitle').textContent = 'Edit Question';
   document.getElementById('submitBtn').textContent = 'Update Question';
+
+  // Show language selector
+  setupLanguageSelector();
 }
 
 function viewQuestion(index) {
@@ -368,24 +381,41 @@ function closeModal() {
 function resetForm() {
   app.editingIndex = -1;
   app.currentQuestion = null;
+  app.currentEditingLang = 'en';
   document.getElementById('questionForm').reset();
   document.getElementById('formTitle').textContent = 'Create New Question';
   document.getElementById('submitBtn').textContent = 'Create Question';
   updateFormForQuestionType(document.getElementById('questionType').value);
+
+  // Hide language selector for new questions
+  const langSelector = document.getElementById('languageSelector');
+  if (langSelector) langSelector.style.display = 'none';
 }
 
-function populateForm(question) {
+function populateForm(question, lang) {
+  const editLang = lang || question.defaultLang || 'en';
+  const langData = getLanguageData(question, editLang);
+
+  if (!langData) {
+    alert(`Language ${editLang} not found in question. Using ${question.defaultLang}`);
+    return populateForm(question, question.defaultLang);
+  }
+
   document.getElementById('questionType').value = question.QStruct;
-  document.getElementById('qLang').value = question.Lang;
-  document.getElementById('qTitle').value = question.QTitle;
-  document.getElementById('qDesc').value = question.QDesc;
+  document.getElementById('qLang').value = editLang;
+  document.getElementById('qTitle').value = langData.QTitle;
+  document.getElementById('qDesc').value = langData.QDesc;
   document.getElementById('qRelB').checked = question.QRelB;
   document.getElementById('qLearn').value = question.QLearn || '';
+
+  if (question.QStruct !== QUESTION_TYPES.FACTQ && question.QStruct !== QUESTION_TYPES.RANGQ) {
+    document.getElementById('qnI').value = question.QnI;
+  }
 
   updateFormForQuestionType(question.QStruct);
 
   // Populate type-specific fields
-  populateTypeSpecificFields(question);
+  populateTypeSpecificFields(question, editLang);
 }
 
 function updateFormForQuestionType(type) {
@@ -538,48 +568,54 @@ function updateFormForQuestionType(type) {
   }
 }
 
-function populateTypeSpecificFields(question) {
+function populateTypeSpecificFields(question, lang) {
   const type = question.QStruct;
+  const editLang = lang || app.currentEditingLang || question.defaultLang || 'en';
+  const langData = getLanguageData(question, editLang);
+
+  if (!langData || !langData.QDetails) return;
+
+  const details = langData.QDetails;
 
   if (type === QUESTION_TYPES.AORBQ || type === QUESTION_TYPES.TRIPQ) {
     if (document.getElementById('qPref1')) {
-      document.getElementById('qPref1').value = question.QDetails.QPref1 || '';
-      document.getElementById('qPref2').value = question.QDetails.QPref2 || '';
-      document.getElementById('qPrefer1').value = question.QDetails.QPrefer1 || '';
-      document.getElementById('qPrefer2').value = question.QDetails.QPrefer2 || '';
+      document.getElementById('qPref1').value = details.QPref1 || '';
+      document.getElementById('qPref2').value = details.QPref2 || '';
+      document.getElementById('qPrefer1').value = details.QPrefer1 || '';
+      document.getElementById('qPrefer2').value = details.QPrefer2 || '';
     }
 
     if (type === QUESTION_TYPES.TRIPQ) {
-      document.getElementById('qMidP').value = question.QDetails.QMidP || '';
-      document.getElementById('qMiddle').value = question.QDetails.QMiddle || '';
+      document.getElementById('qMidP').value = details.QMidP || '';
+      document.getElementById('qMiddle').value = details.QMiddle || '';
     }
   } else if (type === QUESTION_TYPES.LIKSQ) {
-    document.getElementById('qPos').value = question.QDetails.QPos || '';
+    document.getElementById('qPos').value = details.QPos || '';
   } else if (type === QUESTION_TYPES.RANGQ) {
-    document.getElementById('qsUnit').value = question.QDetails.QSUnit || '';
-    document.getElementById('qsMin').value = question.QDetails.QSMin || 0;
-    document.getElementById('qsMax').value = question.QDetails.QSMax || 0;
-    document.getElementById('qsGran').value = question.QDetails.QSGran || 1;
+    document.getElementById('qsUnit').value = details.QSUnit || '';
+    document.getElementById('qsMin').value = details.QSMin || 0;
+    document.getElementById('qsMax').value = details.QSMax || 0;
+    document.getElementById('qsGran').value = details.QSGran || 1;
   } else if (type === QUESTION_TYPES.LEVLQ) {
-    document.getElementById('qSchB').checked = question.QDetails.QSchB || false;
-    document.getElementById('schemeField').style.display = question.QDetails.QSchB ? 'block' : 'none';
-    if (question.QDetails.QScheme) {
-      document.getElementById('qScheme').value = question.QDetails.QScheme;
+    document.getElementById('qSchB').checked = details.QSchB || false;
+    document.getElementById('schemeField').style.display = details.QSchB ? 'block' : 'none';
+    if (details.QScheme) {
+      document.getElementById('qScheme').value = details.QScheme;
     }
-    if (question.QDetails.items && question.QDetails.items.length > 0) {
+    if (details.items && details.items.length > 0) {
       generateLevlqItems();
-      question.QDetails.items.forEach((item, idx) => {
+      details.items.forEach((item, idx) => {
         document.getElementById(`levlq_short_${idx}`).value = item.QItemShort || '';
         document.getElementById(`levlq_long_${idx}`).value = item.QItemLong || '';
         document.getElementById(`levlq_val_${idx}`).value = item.QItemVal || idx + 1;
       });
     }
   } else if (type === QUESTION_TYPES.OPTSQ) {
-    document.getElementById('qMultiB').checked = question.QDetails.QMultiB || false;
-    document.getElementById('qOtherB').checked = question.QDetails.QOtherB || false;
-    if (question.QDetails.items && question.QDetails.items.length > 0) {
+    document.getElementById('qMultiB').checked = details.QMultiB || false;
+    document.getElementById('qOtherB').checked = details.QOtherB || false;
+    if (details.items && details.items.length > 0) {
       generateOptsqItems();
-      question.QDetails.items.forEach((item, idx) => {
+      details.items.forEach((item, idx) => {
         document.getElementById(`optsq_short_${idx}`).value = item.QItemShort || '';
         document.getElementById(`optsq_long_${idx}`).value = item.QItemLong || '';
       });
