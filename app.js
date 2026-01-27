@@ -668,12 +668,17 @@ function handleFormSubmit(e) {
   e.preventDefault();
 
   const type = document.getElementById('questionType').value;
-  const question = createQuestion(type);
+  const editLang = getTrimmedValue('qLang');
+  let question;
 
-  // Populate common fields (with whitespace trimming)
-  question.Lang = getTrimmedValue('qLang');
-  question.QTitle = getTrimmedValue('qTitle');
-  question.QDesc = getTrimmedValue('qDesc');
+  // If editing existing question, start with that; otherwise create new
+  if (app.editingIndex >= 0) {
+    question = JSON.parse(JSON.stringify(app.getQuestion(app.editingIndex))); // Deep copy
+  } else {
+    question = createQuestion(type, editLang);
+  }
+
+  // Populate common fields (language-independent)
   question.QRelB = document.getElementById('qRelB').checked;
   question.QLearn = getTrimmedValue('qLearn');
 
@@ -681,34 +686,44 @@ function handleFormSubmit(e) {
     question.QnI = parseInt(document.getElementById('qnI').value);
   }
 
-  // If editing, preserve the original QID
-  if (app.editingIndex >= 0) {
-    const original = app.getQuestion(app.editingIndex);
-    question.QID = original.QID;
+  // Ensure the language exists in the question
+  if (!question.languages[editLang]) {
+    question.languages[editLang] = {
+      QTitle: '',
+      QDesc: '',
+      QDetails: {}
+    };
   }
+
+  // Get reference to the language data we're editing
+  const langData = question.languages[editLang];
+
+  // Populate language-specific fields
+  langData.QTitle = getTrimmedValue('qTitle');
+  langData.QDesc = getTrimmedValue('qDesc');
 
   // Populate type-specific fields (with whitespace trimming)
   switch(type) {
     case QUESTION_TYPES.AORBQ:
-      question.QDetails.QPref1 = getTrimmedValue('qPref1');
-      question.QDetails.QPref2 = getTrimmedValue('qPref2');
-      question.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
-      question.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
+      langData.QDetails.QPref1 = getTrimmedValue('qPref1');
+      langData.QDetails.QPref2 = getTrimmedValue('qPref2');
+      langData.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
+      langData.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
       break;
 
     case QUESTION_TYPES.LEVLQ:
-      question.QDetails.QSchB = document.getElementById('qSchB').checked;
-      if (question.QDetails.QSchB) {
-        question.QDetails.QScheme = getTrimmedValue('qScheme');
-        question.QDetails.items = [];
+      langData.QDetails.QSchB = document.getElementById('qSchB').checked;
+      if (langData.QDetails.QSchB) {
+        langData.QDetails.QScheme = getTrimmedValue('qScheme');
+        langData.QDetails.items = [];
       } else {
-        question.QDetails.items = [];
+        langData.QDetails.items = [];
         for (let i = 0; i < question.QnI; i++) {
           const shortEl = document.getElementById(`levlq_short_${i}`);
           const longEl = document.getElementById(`levlq_long_${i}`);
           const valEl = document.getElementById(`levlq_val_${i}`);
           if (shortEl) {
-            question.QDetails.items.push({
+            langData.QDetails.items.push({
               QItemShort: shortEl.value.trim(),
               QItemLong: longEl.value.trim(),
               QItemVal: parseInt(valEl.value)
@@ -719,18 +734,18 @@ function handleFormSubmit(e) {
       break;
 
     case QUESTION_TYPES.LIKSQ:
-      question.QDetails.QPos = getTrimmedValue('qPos');
+      langData.QDetails.QPos = getTrimmedValue('qPos');
       break;
 
     case QUESTION_TYPES.OPTSQ:
-      question.QDetails.QMultiB = document.getElementById('qMultiB').checked;
-      question.QDetails.QOtherB = document.getElementById('qOtherB').checked;
-      question.QDetails.items = [];
+      langData.QDetails.QMultiB = document.getElementById('qMultiB').checked;
+      langData.QDetails.QOtherB = document.getElementById('qOtherB').checked;
+      langData.QDetails.items = [];
       for (let i = 0; i < question.QnI; i++) {
         const shortEl = document.getElementById(`optsq_short_${i}`);
         const longEl = document.getElementById(`optsq_long_${i}`);
         if (shortEl) {
-          question.QDetails.items.push({
+          langData.QDetails.items.push({
             QItemShort: shortEl.value.trim(),
             QItemLong: longEl.value.trim()
           });
@@ -739,20 +754,25 @@ function handleFormSubmit(e) {
       break;
 
     case QUESTION_TYPES.RANGQ:
-      question.QDetails.QSUnit = getTrimmedValue('qsUnit');
-      question.QDetails.QSMin = parseFloat(document.getElementById('qsMin').value);
-      question.QDetails.QSMax = parseFloat(document.getElementById('qsMax').value);
-      question.QDetails.QSGran = parseFloat(document.getElementById('qsGran').value);
+      langData.QDetails.QSUnit = getTrimmedValue('qsUnit');
+      langData.QDetails.QSMin = parseFloat(document.getElementById('qsMin').value);
+      langData.QDetails.QSMax = parseFloat(document.getElementById('qsMax').value);
+      langData.QDetails.QSGran = parseFloat(document.getElementById('qsGran').value);
       break;
 
     case QUESTION_TYPES.TRIPQ:
-      question.QDetails.QPref1 = getTrimmedValue('qPref1');
-      question.QDetails.QPref2 = getTrimmedValue('qPref2');
-      question.QDetails.QMidP = getTrimmedValue('qMidP');
-      question.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
-      question.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
-      question.QDetails.QMiddle = getTrimmedValue('qMiddle');
+      langData.QDetails.QPref1 = getTrimmedValue('qPref1');
+      langData.QDetails.QPref2 = getTrimmedValue('qPref2');
+      langData.QDetails.QMidP = getTrimmedValue('qMidP');
+      langData.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
+      langData.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
+      langData.QDetails.QMiddle = getTrimmedValue('qMiddle');
       break;
+  }
+
+  // Set default language if creating new question
+  if (app.editingIndex < 0) {
+    question.defaultLang = editLang;
   }
 
   // Validate before saving
@@ -771,6 +791,174 @@ function handleFormSubmit(e) {
 
   alert('Question saved successfully!');
   showView('list');
+}
+
+// Language selector and translation management
+function setupLanguageSelector() {
+  const question = app.getQuestion(app.editingIndex);
+  if (!question) return;
+
+  const langs = getQuestionLanguages(question);
+  const langSelectorDiv = document.getElementById('languageSelector');
+
+  if (!langSelectorDiv) {
+    // Create language selector if it doesn't exist
+    const formTitle = document.getElementById('formTitle');
+    const selector = document.createElement('div');
+    selector.id = 'languageSelector';
+    selector.className = 'language-selector';
+    formTitle.parentNode.insertBefore(selector, formTitle.nextSibling);
+  }
+
+  const selector = document.getElementById('languageSelector');
+  selector.style.display = 'flex';
+
+  let html = '<div class="lang-selector-content">';
+  html += '<label for="currentLangSelect">Editing Language:</label>';
+  html += '<select id="currentLangSelect" class="lang-select">';
+
+  langs.forEach(lang => {
+    const selected = lang === app.currentEditingLang ? 'selected' : '';
+    const langName = COMMON_LANGUAGES[lang] || lang;
+    html += `<option value="${lang}" ${selected}>${lang.toUpperCase()} - ${langName}</option>`;
+  });
+
+  html += '</select>';
+  html += '<button type="button" id="addTranslationBtn" class="btn-secondary">Add Translation</button>';
+  html += '</div>';
+
+  selector.innerHTML = html;
+
+  // Add event listeners
+  document.getElementById('currentLangSelect').addEventListener('change', (e) => {
+    switchEditingLanguage(e.target.value);
+  });
+
+  document.getElementById('addTranslationBtn').addEventListener('click', () => {
+    showAddTranslationDialog();
+  });
+}
+
+function switchEditingLanguage(newLang) {
+  const question = app.getQuestion(app.editingIndex);
+  if (!question || !question.languages[newLang]) return;
+
+  app.currentEditingLang = newLang;
+  populateForm(question, newLang);
+  setupLanguageSelector(); // Refresh selector to show current selection
+}
+
+function showAddTranslationDialog() {
+  const question = app.getQuestion(app.editingIndex);
+  if (!question) return;
+
+  const existingLangs = getQuestionLanguages(question);
+
+  // Create modal HTML
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.id = 'addTranslationModal';
+  modal.style.display = 'block';
+
+  let html = '<div class="modal-content">';
+  html += '<div class="modal-header">';
+  html += '<h2>Add Translation</h2>';
+  html += '<button onclick="closeAddTranslationModal()" class="close-btn">&times;</button>';
+  html += '</div>';
+  html += '<div class="modal-body">';
+  html += '<div class="form-group">';
+  html += '<label for="newLangSelect">Select Language:</label>';
+  html += '<select id="newLangSelect" class="lang-select">';
+
+  // Add common languages that don't already exist
+  for (const [code, name] of Object.entries(COMMON_LANGUAGES)) {
+    if (code !== 'other' && !existingLangs.includes(code)) {
+      html += `<option value="${code}">${name}</option>`;
+    }
+  }
+  html += '<option value="other">Other (enter code)</option>';
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="form-group" id="customLangGroup" style="display: none;">';
+  html += '<label for="customLangCode">Language Code (e.g., "pt", "sv"):</label>';
+  html += '<input type="text" id="customLangCode" maxlength="10" pattern="[a-z]{2,10}">';
+  html += '</div>';
+
+  html += '<div class="form-group">';
+  html += '<label>';
+  html += '<input type="checkbox" id="copyFromExisting"> Copy from existing language';
+  html += '</label>';
+  html += '</div>';
+
+  html += '<div class="form-group" id="copyFromGroup" style="display: none;">';
+  html += '<label for="copyFromLang">Copy from:</label>';
+  html += '<select id="copyFromLang" class="lang-select">';
+  existingLangs.forEach(lang => {
+    const langName = COMMON_LANGUAGES[lang] || lang;
+    html += `<option value="${lang}">${lang.toUpperCase()} - ${langName}</option>`;
+  });
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="form-actions">';
+  html += '<button onclick="addTranslation()" class="btn-primary">Add Translation</button>';
+  html += '<button onclick="closeAddTranslationModal()" class="btn-secondary">Cancel</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  modal.innerHTML = html;
+  document.body.appendChild(modal);
+
+  // Add event listeners
+  document.getElementById('newLangSelect').addEventListener('change', (e) => {
+    document.getElementById('customLangGroup').style.display =
+      e.target.value === 'other' ? 'block' : 'none';
+  });
+
+  document.getElementById('copyFromExisting').addEventListener('change', (e) => {
+    document.getElementById('copyFromGroup').style.display =
+      e.target.checked ? 'block' : 'none';
+  });
+}
+
+function closeAddTranslationModal() {
+  const modal = document.getElementById('addTranslationModal');
+  if (modal) modal.remove();
+}
+
+function addTranslation() {
+  const question = app.getQuestion(app.editingIndex);
+  if (!question) return;
+
+  let newLang = document.getElementById('newLangSelect').value;
+  if (newLang === 'other') {
+    newLang = document.getElementById('customLangCode').value.trim().toLowerCase();
+    if (!newLang || !/^[a-z]{2,10}$/.test(newLang)) {
+      alert('Please enter a valid language code (2-10 lowercase letters)');
+      return;
+    }
+  }
+
+  const copyFrom = document.getElementById('copyFromExisting').checked ?
+    document.getElementById('copyFromLang').value : null;
+
+  const result = addLanguageToQuestion(question, newLang, copyFrom);
+
+  if (!result.success) {
+    alert(result.error || 'Failed to add language');
+    return;
+  }
+
+  app.updateQuestion(app.editingIndex, question);
+  closeAddTranslationModal();
+
+  alert(`Translation added for ${newLang.toUpperCase()}${result.copied ? ' (copied from ' + copyFrom + ')' : ''}`);
+
+  // Switch to editing the new language
+  app.currentEditingLang = newLang;
+  populateForm(question, newLang);
+  setupLanguageSelector();
 }
 
 function renderValidationResults() {

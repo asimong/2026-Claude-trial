@@ -56,12 +56,35 @@ File operations available in the navigation:
 
 1. Click "Create Question" in the navigation
 2. Select the question type from the dropdown
-3. Fill in the common fields (title, description, etc.)
-4. Complete the type-specific fields
-5. Click "Create Question" to save
-6. Remember to use "Save" to download your updated file
+3. Select initial language (default: English)
+4. Fill in the common fields (title, description, etc.)
+5. Complete the type-specific fields
+6. Click "Create Question" to save
+7. Remember to use "Save" to download your updated file
 
 **Note**: All text fields automatically trim whitespace from both ends
+
+### Multilingual Support
+
+Questions can be translated into multiple languages:
+
+**Adding Translations:**
+1. Edit an existing question
+2. Click "Add Translation" button in the language selector
+3. Choose a language from the dropdown or enter a custom language code
+4. Optionally copy from an existing language as a starting point
+5. Fill in the translated text for all fields
+6. Save the question
+
+**Switching Languages:**
+- When editing, use the language dropdown to switch between available translations
+- Each language version maintains its own title, description, and type-specific text
+- Common fields (QnI, QRelB, etc.) are shared across all languages
+
+**Language Codes:**
+- Use standard ISO 639-1 codes (en, es, fr, de, etc.)
+- Supported languages: English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Arabic, Russian, Hindi, and more
+- Custom language codes accepted (2-10 lowercase letters)
 
 ### Managing Questions
 
@@ -78,22 +101,56 @@ File operations available in the navigation:
 
 ## Data Structure
 
-Questions follow the RegenCHOICE specification with:
+Questions follow the RegenCHOICE specification with multilingual support:
 
 ### Common Fields (all question types)
-- `QID`: Unique question identifier (32-bit integer)
-- `Lang`: Language code (e.g., "en")
+- `QID`: Unique question identifier (32-bit integer, same for all translations)
+- `defaultLang`: Primary language code (e.g., "en")
+- `QRelB`: Boolean - relational or property question (shared across languages)
+- `QnI`: Number of items for itemized questions, 2-10 (shared across languages)
+- `QStruct`: Question type - AORBQ, FACTQ, etc. (shared across languages)
+- `QLearn`: Optional learning resource link (shared across languages)
+- `languages`: Object containing language-specific data
+
+### Language-Specific Fields (within `languages.{lang}`)
+Each language code (e.g., "en", "es", "fr") contains:
 - `QTitle`: Short title (max 80 characters)
 - `QDesc`: Optional longer description
-- `QRelB`: Boolean - relational or property question
-- `QnI`: Number of items (for itemized questions, 2-10)
-- `QStruct`: Question type (AORBQ, FACTQ, etc.)
-- `QLearn`: Optional learning resource link
-- `QDetails`: Type-specific fields
+- `QDetails`: Type-specific fields (translated for each language)
+
+### Example Structure
+```json
+{
+  "QID": 123456789,
+  "defaultLang": "en",
+  "QRelB": false,
+  "QnI": 5,
+  "QStruct": "AORBQ",
+  "QLearn": "https://example.com/help",
+  "languages": {
+    "en": {
+      "QTitle": "Do you prefer A or B?",
+      "QDesc": "Choose your preference",
+      "QDetails": {
+        "QPref1": "Option A",
+        "QPref2": "Option B"
+      }
+    },
+    "es": {
+      "QTitle": "¿Prefieres A o B?",
+      "QDesc": "Elige tu preferencia",
+      "QDetails": {
+        "QPref1": "Opción A",
+        "QPref2": "Opción B"
+      }
+    }
+  }
+}
+```
 
 ### Type-Specific Fields
 
-Each question type has unique fields in `QDetails`. See the [RegenCHOICE documentation](https://wiki.simongrant.org/doku.php/ch:qs:here) for complete specifications.
+Each question type has unique fields in `QDetails` within each language. See the [RegenCHOICE documentation](https://wiki.simongrant.org/doku.php/ch:qs:here) for complete specifications.
 
 ## Technical Details
 
