@@ -6,6 +6,9 @@
 // Default filename for question storage
 const DEFAULT_FILENAME = 'regenchoice-questions.json';
 
+// Server API endpoint (update this to your server path)
+const API_ENDPOINT = './api.php';
+
 class QuestionManager {
   constructor() {
     this.questions = [];
@@ -14,6 +17,7 @@ class QuestionManager {
     this.currentFilename = DEFAULT_FILENAME;
     this.unsavedChanges = false;
     this.currentEditingLang = 'en';  // Track which language is being edited
+    this.serverAvailable = false;  // Track if server API is available
   }
 
   // File operations
@@ -73,6 +77,88 @@ class QuestionManager {
       });
   }
 
+  // Server operations
+  async checkServerAvailability() {
+    try {
+      const response = await fetch(`${API_ENDPOINT}?action=info`);
+      const data = await response.json();
+      this.serverAvailable = data.success === true;
+      return this.serverAvailable;
+    } catch (err) {
+      console.warn('Server API not available:', err);
+      this.serverAvailable = false;
+      return false;
+    }
+  }
+
+  async loadFromServer() {
+    try {
+      updateStatus('Loading from server...');
+      const response = await fetch(`${API_ENDPOINT}?action=load`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load from server');
+      }
+
+      this.questions = data.questions || [];
+      this.currentFilename = 'server: questions.json';
+      this.unsavedChanges = false;
+      updateStatus(`Loaded ${this.questions.length} questions from server`);
+
+      return {
+        success: true,
+        count: this.questions.length,
+        message: data.message
+      };
+    } catch (err) {
+      console.error('Load from server error:', err);
+      throw new Error('Failed to load from server: ' + err.message);
+    }
+  }
+
+  async saveToServer() {
+    try {
+      updateStatus('Saving to server...');
+
+      const response = await fetch(`${API_ENDPOINT}?action=save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(this.questions)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save to server');
+      }
+
+      this.unsavedChanges = false;
+      this.currentFilename = 'server: questions.json';
+      updateStatus(`Saved ${data.count} questions to server`);
+
+      return {
+        success: true,
+        count: data.count,
+        bytes: data.bytes
+      };
+    } catch (err) {
+      console.error('Save to server error:', err);
+      throw new Error('Failed to save to server: ' + err.message);
+    }
+  }
+
   // CRUD operations
   addQuestion(question) {
     this.questions.push(question);
@@ -120,11 +206,38 @@ class QuestionManager {
 let app;
 
 // Initialize app when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   app = new QuestionManager();
   initializeUI();
+
+  // Check server availability
+  const serverAvailable = await app.checkServerAvailability();
+  updateServerButtonsVisibility(serverAvailable);
+
   showStartupModal();
 });
+
+// Update server buttons visibility based on availability
+function updateServerButtonsVisibility(available) {
+  const uploadBtn = document.getElementById('uploadServerBtn');
+  const loadBtn = document.getElementById('loadServerBtn');
+
+  if (uploadBtn) {
+    uploadBtn.style.display = available ? 'block' : 'none';
+    if (!available) {
+      uploadBtn.title = 'Server API not available';
+    }
+  }
+
+  if (loadBtn) {
+    loadBtn.style.display = available ? 'block' : 'none';
+    if (!available) {
+      loadBtn.title = 'Server API not available';
+    }
+  }
+
+  console.log('Server availability:', available);
+}
 
 // UI Management
 function initializeUI() {
@@ -152,6 +265,34 @@ function initializeUI() {
 
   document.getElementById('loadBtn').addEventListener('click', () => {
     document.getElementById('loadFile').click();
+  });
+
+  // Server operations
+  document.getElementById('uploadServerBtn')?.addEventListener('click', async () => {
+    if (confirm('Upload current questions to server? This will replace server data.')) {
+      try {
+        const result = await app.saveToServer();
+        alert(`Successfully uploaded ${result.count} questions to server`);
+        showView('list');
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
+      }
+    }
+  });
+
+  document.getElementById('loadServerBtn')?.addEventListener('click', async () => {
+    if (app.unsavedChanges && app.questions.length > 0) {
+      if (!confirm('You have unsaved changes. Load from server and discard changes?')) {
+        return;
+      }
+    }
+    try {
+      const result = await app.loadFromServer();
+      alert(`Successfully loaded ${result.count} questions from server`);
+      showView('list');
+    } catch (err) {
+      alert('Load failed: ' + err.message);
+    }
   });
 
   document.getElementById('loadFile').addEventListener('change', async (e) => {
@@ -240,6 +381,22 @@ function showStartupModal() {
     updateStatus('Started with empty question set');
     showView('list');
   };
+
+  // Server load button (if available)
+  const startupServerBtn = document.getElementById('startupLoadServerBtn');
+  if (startupServerBtn) {
+    startupServerBtn.style.display = app.serverAvailable ? 'block' : 'none';
+    startupServerBtn.onclick = async () => {
+      try {
+        const result = await app.loadFromServer();
+        updateStatus(`Loaded ${result.count} questions from server`);
+        modal.style.display = 'none';
+        showView('list');
+      } catch (err) {
+        alert('Load from server failed: ' + err.message);
+      }
+    };
+  }
 }
 
 // Save As dialog

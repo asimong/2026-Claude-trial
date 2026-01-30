@@ -22,6 +22,8 @@
         <button id="saveAsBtn" class="btn-file" title="Save to a new file">Save As...</button>
         <button id="loadBtn" class="btn-file" title="Load from file(s)">Load...</button>
         <button id="mergeBtn" class="btn-file" title="Merge from additional file(s)">Merge...</button>
+        <button id="uploadServerBtn" class="btn-server" title="Upload to server" style="display: none;">📤 Upload to Server</button>
+        <button id="loadServerBtn" class="btn-server" title="Load from server" style="display: none;">📥 Load from Server</button>
         <input type="file" id="loadFile" accept=".json" multiple style="display: none;">
         <input type="file" id="mergeFile" accept=".json" multiple style="display: none;">
       </div>
@@ -152,14 +154,20 @@
           <p>How would you like to begin?</p>
           <div class="startup-options">
             <div class="startup-option">
-              <h3>Load Existing Questions</h3>
-              <p>Open one or more JSON files containing questions.</p>
+              <h3>📥 Load from Server</h3>
+              <p>Load questions stored on the server.</p>
+              <p><small>Requires server API to be configured</small></p>
+              <button id="startupLoadServerBtn" class="btn-primary" style="display: none;">Load from Server</button>
+            </div>
+            <div class="startup-option">
+              <h3>📁 Load from File(s)</h3>
+              <p>Open one or more JSON files from your computer.</p>
               <p><small>Tip: Select multiple files to merge them together</small></p>
               <button id="startupLoadBtn" class="btn-primary">Load from File(s)...</button>
               <input type="file" id="startupLoadFile" accept=".json" multiple style="display: none;">
             </div>
             <div class="startup-option">
-              <h3>Start Fresh</h3>
+              <h3>✨ Start Fresh</h3>
               <p>Begin with an empty question set.</p>
               <p><small>You can load files later using the Load button</small></p>
               <button id="startupNewBtn" class="btn-secondary">Start with Empty Set</button>
