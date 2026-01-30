@@ -795,16 +795,30 @@ function handleFormSubmit(e) {
 
 // Language selector and translation management
 function setupLanguageSelector() {
+  console.log('setupLanguageSelector called, editingIndex:', app.editingIndex);
+
   const question = app.getQuestion(app.editingIndex);
-  if (!question) return;
+  if (!question) {
+    console.log('No question found at index', app.editingIndex);
+    return;
+  }
+
+  console.log('Question found:', question.QID, 'Languages:', Object.keys(question.languages || {}));
 
   const langs = getQuestionLanguages(question);
   const selector = document.getElementById('languageSelector');
 
-  if (!selector) return;
+  if (!selector) {
+    console.log('ERROR: languageSelector element not found in DOM!');
+    return;
+  }
+
+  console.log('Language selector element found, showing it...');
 
   // Show the selector
   selector.style.display = 'flex';
+
+  console.log('Selector display style set to:', selector.style.display);
 
   let html = '<div class="lang-selector-content">';
   html += '<label for="currentLangSelect">Editing Language:</label>';

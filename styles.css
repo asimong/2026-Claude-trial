@@ -515,11 +515,16 @@ nav button.active {
 
 /* Language Selector */
 .language-selector {
-  background: var(--background);
-  padding: 15px;
-  margin: 15px 0;
-  border-radius: 6px;
-  border: 2px solid var(--accent-color);
+  background: #e0f7f7;  /* Light teal background - more visible */
+  padding: 20px;
+  margin: 20px 0;
+  border-radius: 8px;
+  border: 3px solid var(--accent-color);  /* Thicker border */
+  box-shadow: 0 2px 8px rgba(0, 169, 165, 0.2);  /* Subtle shadow */
+}
+
+.language-selector::before {
+  content: "🌍 ";  /* Globe emoji for visibility */
 }
 
 .lang-selector-content {
