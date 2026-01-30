@@ -49,6 +49,8 @@
         <div class="view-header">
           <h2 id="formTitle">Create New Question</h2>
         </div>
+        <!-- Language selector appears here when editing -->
+        <div id="languageSelector" class="language-selector" style="display: none;"></div>
         <form id="questionForm">
           <div class="form-section">
             <h3>Question Type</h3>
@@ -72,7 +74,7 @@
             <div class="form-group">
               <label for="qLang">Language *</label>
               <input type="text" id="qLang" value="en" required maxlength="10">
-              <small>Language code (e.g., en, es, fr)</small>
+              <small>Language code (e.g., en, es, fr). To add more languages, save this question first, then Edit it and use the "Add Translation" button.</small>
             </div>
 
             <div class="form-group">

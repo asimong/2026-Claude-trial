@@ -799,18 +799,11 @@ function setupLanguageSelector() {
   if (!question) return;
 
   const langs = getQuestionLanguages(question);
-  const langSelectorDiv = document.getElementById('languageSelector');
-
-  if (!langSelectorDiv) {
-    // Create language selector if it doesn't exist
-    const formTitle = document.getElementById('formTitle');
-    const selector = document.createElement('div');
-    selector.id = 'languageSelector';
-    selector.className = 'language-selector';
-    formTitle.parentNode.insertBefore(selector, formTitle.nextSibling);
-  }
-
   const selector = document.getElementById('languageSelector');
+
+  if (!selector) return;
+
+  // Show the selector
   selector.style.display = 'flex';
 
   let html = '<div class="lang-selector-content">';
