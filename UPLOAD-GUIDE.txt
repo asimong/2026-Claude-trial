@@ -1,0 +1,73 @@
+SIMPLE UPLOAD GUIDE FOR REGENCHOICE QUESTION MANAGER
+======================================================
+
+YOUR FILES ARE HERE:
+-------------------
+/home/user/2026-Claude-trial/
+
+FILES TO UPLOAD:
+---------------
+Essential files (required):
+  ✓ index.html
+  ✓ app.js
+  ✓ question-data.js
+  ✓ styles.css
+
+Optional files:
+  ○ api.php (only if you want server-side storage)
+  ○ README.md (documentation)
+
+DO NOT UPLOAD:
+-------------
+  ✗ deploy.sh (this is just for automation)
+  ✗ .git folder (if present)
+  ✗ data/ folder (will be created automatically on server)
+
+
+METHOD 1: FTP/SFTP CLIENT (Easiest)
+====================================
+1. Open FileZilla, Cyberduck, or your FTP client
+2. Connect to: www.simongrant.org
+3. Navigate to your web directory
+4. Drag and drop the 4-6 files listed above
+5. If using server storage, create a "data" folder and set permissions to 755
+
+
+METHOD 2: COMMAND LINE (if you have SSH)
+=========================================
+From your terminal, run:
+
+cd /home/user/2026-Claude-trial
+
+scp index.html app.js question-data.js styles.css api.php \
+  your-username@www.simongrant.org:/path/to/web/directory/
+
+Then SSH to your server and create the data directory:
+ssh your-username@www.simongrant.org
+mkdir -p /path/to/web/directory/data
+chmod 755 /path/to/web/directory/data
+
+
+METHOD 3: COPY TO USB/CLOUD
+============================
+1. Copy the 6 files to a USB drive or cloud storage (Dropbox, Google Drive)
+2. Download them on another computer
+3. Upload to your server using any method
+
+
+AFTER UPLOADING:
+===============
+1. Visit: https://www.simongrant.org/yourfolder/
+2. The app should load immediately
+3. If you see server buttons (📤 📥), server storage is working
+4. If not, you can still use local file storage (Save/Load buttons)
+
+
+UPDATING THE APP:
+================
+Whenever I make changes to the files:
+1. Just re-upload the changed files
+2. Replace the old versions on your server
+3. Refresh your browser (Ctrl+F5 or Cmd+Shift+R)
+
+No git knowledge required!
