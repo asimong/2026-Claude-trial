@@ -152,15 +152,145 @@ Each language code (e.g., "en", "es", "fr") contains:
 
 Each question type has unique fields in `QDetails` within each language. See the [RegenCHOICE documentation](https://wiki.simongrant.org/doku.php/ch:qs:here) for complete specifications.
 
+## Deployment
+
+### Automated Deployment to Server
+
+The application includes a deployment script to automate uploading to your web server.
+
+**Setup:**
+
+1. Edit `deploy.sh` and update these variables:
+   ```bash
+   SERVER_USER="your-username"
+   SERVER_HOST="www.simongrant.org"
+   SERVER_PATH="/path/to/web/directory"
+   ```
+
+2. Make the script executable:
+   ```bash
+   chmod +x deploy.sh
+   ```
+
+3. Deploy to your server:
+   ```bash
+   ./deploy.sh
+   ```
+
+**Requirements:**
+- SSH access to your server
+- `rsync` installed on your local machine
+- PHP support on your server (for server-side storage)
+
+**What gets deployed:**
+- All HTML, CSS, and JavaScript files
+- PHP API for server storage
+- README documentation
+- Excludes: git files, local data, deployment script
+
+### Alternative: Git-Based Deployment
+
+For simpler deployments without the script:
+
+1. Clone this repository on your server:
+   ```bash
+   cd /var/www/html/regenchoice
+   git clone https://github.com/yourusername/yourrepo.git .
+   ```
+
+2. To update, SSH to server and pull changes:
+   ```bash
+   cd /var/www/html/regenchoice
+   git pull origin main
+   ```
+
+## Server-Side Storage
+
+The app now supports saving questions directly to the server instead of just downloading files.
+
+### Server Setup
+
+1. Ensure PHP is installed on your server (PHP 7.4 or higher recommended)
+
+2. Create a writable `data` directory:
+   ```bash
+   mkdir data
+   chmod 755 data
+   ```
+
+3. The API will automatically create `data/questions.json` when you first save
+
+4. For security, you may want to restrict access to the data directory:
+   ```apache
+   # Add to .htaccess in data directory
+   Order deny,allow
+   Deny from all
+   ```
+
+### Using Server Storage
+
+Once deployed, the app will automatically detect if the server API is available:
+
+**Upload to Server:**
+- Click "📤 Upload to Server" button in the navigation
+- Uploads current questions to server storage
+- Server keeps automatic backups (last 5 versions)
+
+**Load from Server:**
+- Click "📥 Load from Server" button
+- Loads questions stored on server
+- Also available in startup modal
+
+**Features:**
+- Automatic backup system (keeps last 5 versions)
+- File size limit: 5MB
+- JSON validation on server
+- Server status indicator
+
+### Local vs Server Storage
+
+You can use both methods:
+- **Local files**: Download/upload JSON files (good for backups, sharing)
+- **Server storage**: Direct save to server (convenient for single-user editing)
+- **Hybrid approach**: Work locally, periodically upload to server
+
 ## Technical Details
 
 - Pure HTML/CSS/JavaScript
 - No dependencies or frameworks
-- File-based storage (JSON) for data portability and collaboration
+- Dual storage: File-based (JSON) for portability + Server-side (PHP) for convenience
 - Automatic whitespace trimming on all text inputs
 - Support for loading and merging multiple files
 - Unsaved changes warning
 - Responsive design for mobile and desktop
+- Server API with automatic backups
+
+## Troubleshooting
+
+### Server buttons not showing
+
+If the "Upload to Server" and "Load from Server" buttons don't appear:
+
+1. Check browser console for errors
+2. Verify `api.php` is deployed to your server
+3. Test API directly: `https://yourserver.com/path/api.php?action=info`
+4. Check PHP is enabled on your server
+5. Verify `data` directory exists and is writable
+
+### Deployment script fails
+
+Common issues:
+
+- **SSH key not configured**: Set up SSH key authentication
+- **Permission denied**: Check server path permissions
+- **rsync not found**: Install rsync (`apt-get install rsync` or `brew install rsync`)
+
+### Server save/load fails
+
+- Check `data` directory permissions (755 for directory)
+- Verify PHP has write permissions
+- Check server error logs for PHP errors
+- Ensure file size is under 5MB limit
 
 ## Resources
 

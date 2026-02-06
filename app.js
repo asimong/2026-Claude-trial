@@ -1,134 +1,177 @@
 /**
  * RegenCHOICE Question Management App
- * File-based storage version
+ *
+ * This file contains the main application logic for managing questions.
+ * It's designed to be simple and easy to modify.
  */
 
-// Default filename for question storage
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
 const DEFAULT_FILENAME = 'regenchoice-questions.json';
+const API_ENDPOINT = './api.php';
+
+// =============================================================================
+// APPLICATION STATE
+// =============================================================================
 
 class QuestionManager {
   constructor() {
-    this.questions = [];
-    this.currentQuestion = null;
-    this.editingIndex = -1;
+    this.questions = [];           // Array of all questions
+    this.editingIndex = -1;        // Index of question being edited (-1 = creating new)
     this.currentFilename = DEFAULT_FILENAME;
     this.unsavedChanges = false;
-    this.currentEditingLang = 'en';  // Track which language is being edited
+    this.serverAvailable = false;
   }
 
-  // File operations
+  // Add a new question to the list
+  addQuestion(question) {
+    this.questions.push(question);
+    this.unsavedChanges = true;
+  }
+
+  // Update an existing question
+  updateQuestion(index, question) {
+    if (index >= 0 && index < this.questions.length) {
+      this.questions[index] = question;
+      this.unsavedChanges = true;
+    }
+  }
+
+  // Delete a question
+  deleteQuestion(index) {
+    if (index >= 0 && index < this.questions.length) {
+      this.questions.splice(index, 1);
+      this.unsavedChanges = true;
+    }
+  }
+
+  // Get a specific question
+  getQuestion(index) {
+    return this.questions[index];
+  }
+
+  // Get all questions
+  getAllQuestions() {
+    return this.questions;
+  }
+
+  // Save to a local file (downloads to user's computer)
   saveToFile(filename) {
-    const dataStr = JSON.stringify(this.questions, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
+    const jsonString = JSON.stringify(this.questions, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
     const link = document.createElement('a');
     link.href = url;
     link.download = filename || this.currentFilename;
     link.click();
+
     URL.revokeObjectURL(url);
     this.unsavedChanges = false;
-    updateStatus(`Saved to ${filename || this.currentFilename}`);
+    showMessage(`Saved to ${filename || this.currentFilename}`);
   }
 
-  loadFromFile(file, merge = false) {
+  // Load from a local file
+  async loadFromFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+
       reader.onload = (e) => {
         try {
-          const imported = JSON.parse(e.target.result);
-          if (Array.isArray(imported)) {
-            if (merge) {
-              // Merge: add new questions, avoiding duplicates by QID
-              const existingQIDs = new Set(this.questions.map(q => q.QID));
-              const newQuestions = imported.filter(q => !existingQIDs.has(q.QID));
-              this.questions.push(...newQuestions);
-              updateStatus(`Merged ${newQuestions.length} new questions from ${file.name}`);
-              resolve({ count: newQuestions.length, merged: true });
-            } else {
-              // Replace: load as new file
-              this.questions = imported;
-              this.currentFilename = file.name;
-              this.unsavedChanges = false;
-              updateStatus(`Loaded ${imported.length} questions from ${file.name}`);
-              resolve({ count: imported.length, merged: false });
-            }
-          } else {
-            reject('Invalid file format: expected an array of questions');
+          const data = JSON.parse(e.target.result);
+          if (!Array.isArray(data)) {
+            reject('File must contain an array of questions');
+            return;
           }
+          this.questions = data;
+          this.currentFilename = file.name;
+          this.unsavedChanges = false;
+          resolve(data.length);
         } catch (err) {
           reject('Error parsing JSON: ' + err.message);
         }
       };
+
       reader.onerror = () => reject('Error reading file');
       reader.readAsText(file);
     });
   }
 
-  loadFromMultipleFiles(files) {
-    return Promise.all(Array.from(files).map(file => this.loadFromFile(file, true)))
-      .then(results => {
-        const totalMerged = results.reduce((sum, r) => sum + r.count, 0);
-        updateStatus(`Merged ${totalMerged} questions from ${files.length} files`);
-        return totalMerged;
-      });
-  }
-
-  // CRUD operations
-  addQuestion(question) {
-    this.questions.push(question);
-    this.markUnsaved();
-  }
-
-  updateQuestion(index, question) {
-    if (index >= 0 && index < this.questions.length) {
-      this.questions[index] = question;
-      this.markUnsaved();
+  // Check if server API is available
+  async checkServerAvailability() {
+    try {
+      const response = await fetch(`${API_ENDPOINT}?action=info`);
+      const data = await response.json();
+      this.serverAvailable = data.success === true;
+      return this.serverAvailable;
+    } catch (err) {
+      this.serverAvailable = false;
+      return false;
     }
   }
 
-  deleteQuestion(index) {
-    if (index >= 0 && index < this.questions.length) {
-      this.questions.splice(index, 1);
-      this.markUnsaved();
+  // Save to server
+  async saveToServer() {
+    const response = await fetch(`${API_ENDPOINT}?action=save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(this.questions)
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to save to server');
     }
+
+    this.unsavedChanges = false;
+    this.currentFilename = 'server: questions.json';
+    showMessage(`Saved ${data.count} questions to server`);
+    return data;
   }
 
-  getQuestion(index) {
-    return this.questions[index];
-  }
+  // Load from server
+  async loadFromServer() {
+    const response = await fetch(`${API_ENDPOINT}?action=load`);
+    const data = await response.json();
 
-  getAllQuestions() {
-    return this.questions;
-  }
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load from server');
+    }
 
-  markUnsaved() {
-    this.unsavedChanges = true;
-    updateStatus(`Unsaved changes (${this.questions.length} questions)`);
-  }
-
-  validateAll() {
-    const results = this.questions.map((q, idx) => ({
-      index: idx,
-      question: q,
-      validation: validateQuestion(q)
-    }));
-    return results;
+    this.questions = data.questions || [];
+    this.currentFilename = 'server: questions.json';
+    this.unsavedChanges = false;
+    showMessage(`Loaded ${this.questions.length} questions from server`);
+    return this.questions.length;
   }
 }
 
 // Global app instance
 let app;
 
-// Initialize app when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
   app = new QuestionManager();
-  initializeUI();
+  setupEventListeners();
+
+  // Check if server is available
+  const serverAvailable = await app.checkServerAvailability();
+  toggleServerButtons(serverAvailable);
+
   showStartupModal();
 });
 
-// UI Management
-function initializeUI() {
-  // Navigation buttons
+// =============================================================================
+// EVENT LISTENERS
+// =============================================================================
+
+function setupEventListeners() {
+  // Navigation links
   document.getElementById('navList').addEventListener('click', () => showView('list'));
   document.getElementById('navCreate').addEventListener('click', () => showView('create'));
   document.getElementById('navValidate').addEventListener('click', () => showView('validate'));
@@ -141,60 +184,64 @@ function initializeUI() {
   // Form submission
   document.getElementById('questionForm').addEventListener('submit', handleFormSubmit);
 
-  // File operations
-  document.getElementById('saveBtn').addEventListener('click', () => {
+  // Local file operations
+  document.getElementById('saveLocalBtn').addEventListener('click', () => {
     app.saveToFile(app.currentFilename);
   });
 
   document.getElementById('saveAsBtn').addEventListener('click', () => {
-    showSaveAsDialog();
+    const filename = prompt('Enter filename:', app.currentFilename);
+    if (filename) {
+      app.currentFilename = filename.endsWith('.json') ? filename : filename + '.json';
+      app.saveToFile(app.currentFilename);
+    }
   });
 
-  document.getElementById('loadBtn').addEventListener('click', () => {
-    document.getElementById('loadFile').click();
+  document.getElementById('loadLocalBtn').addEventListener('click', () => {
+    document.getElementById('loadFileInput').click();
   });
 
-  document.getElementById('loadFile').addEventListener('change', async (e) => {
+  document.getElementById('loadFileInput').addEventListener('change', async (e) => {
     if (e.target.files.length > 0) {
-      try {
-        if (e.target.files.length === 1) {
-          if (app.unsavedChanges && app.questions.length > 0) {
-            if (!confirm('You have unsaved changes. Load new file and discard changes?')) {
-              e.target.value = '';
-              return;
-            }
-          }
-          const result = await app.loadFromFile(e.target.files[0], false);
-          alert(`Successfully loaded ${result.count} questions from ${e.target.files[0].name}`);
-        } else {
-          // Multiple files - merge them
-          const total = await app.loadFromMultipleFiles(e.target.files);
-          alert(`Successfully merged ${total} questions from ${e.target.files.length} files`);
-        }
-        showView('list');
+      if (app.unsavedChanges && !confirm('Discard unsaved changes?')) {
         e.target.value = '';
+        return;
+      }
+
+      try {
+        const count = await app.loadFromFile(e.target.files[0]);
+        showMessage(`Loaded ${count} questions`);
+        showView('list');
       } catch (err) {
         alert('Load failed: ' + err);
-        e.target.value = '';
+      }
+
+      e.target.value = '';
+    }
+  });
+
+  // Server operations
+  document.getElementById('saveServerBtn')?.addEventListener('click', async () => {
+    if (confirm('Save to server? This will replace server data.')) {
+      try {
+        await app.saveToServer();
+        showView('list');
+      } catch (err) {
+        alert('Save to server failed: ' + err.message);
       }
     }
   });
 
-  document.getElementById('mergeBtn').addEventListener('click', () => {
-    document.getElementById('mergeFile').click();
-  });
+  document.getElementById('loadServerBtn')?.addEventListener('click', async () => {
+    if (app.unsavedChanges && !confirm('Discard unsaved changes?')) {
+      return;
+    }
 
-  document.getElementById('mergeFile').addEventListener('change', async (e) => {
-    if (e.target.files.length > 0) {
-      try {
-        const total = await app.loadFromMultipleFiles(e.target.files);
-        alert(`Successfully merged ${total} questions from ${e.target.files.length} file(s)`);
-        showView('list');
-        e.target.value = '';
-      } catch (err) {
-        alert('Merge failed: ' + err);
-        e.target.value = '';
-      }
+    try {
+      await app.loadFromServer();
+      showView('list');
+    } catch (err) {
+      alert('Load from server failed: ' + err.message);
     }
   });
 
@@ -202,75 +249,15 @@ function initializeUI() {
   window.addEventListener('beforeunload', (e) => {
     if (app.unsavedChanges) {
       e.preventDefault();
-      e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      e.returnValue = 'You have unsaved changes!';
       return e.returnValue;
     }
   });
 }
 
-// Startup modal for initial file loading
-function showStartupModal() {
-  const modal = document.getElementById('startupModal');
-  modal.style.display = 'block';
-
-  document.getElementById('startupLoadBtn').onclick = () => {
-    document.getElementById('startupLoadFile').click();
-  };
-
-  document.getElementById('startupLoadFile').onchange = async (e) => {
-    if (e.target.files.length > 0) {
-      try {
-        if (e.target.files.length === 1) {
-          const result = await app.loadFromFile(e.target.files[0], false);
-          updateStatus(`Loaded ${result.count} questions from ${e.target.files[0].name}`);
-        } else {
-          const total = await app.loadFromMultipleFiles(e.target.files);
-          updateStatus(`Merged ${total} questions from ${e.target.files.length} files`);
-        }
-        modal.style.display = 'none';
-        showView('list');
-      } catch (err) {
-        alert('Load failed: ' + err);
-      }
-    }
-  };
-
-  document.getElementById('startupNewBtn').onclick = () => {
-    modal.style.display = 'none';
-    updateStatus('Started with empty question set');
-    showView('list');
-  };
-}
-
-// Save As dialog
-function showSaveAsDialog() {
-  const filename = prompt('Enter filename:', app.currentFilename);
-  if (filename) {
-    app.currentFilename = filename.endsWith('.json') ? filename : filename + '.json';
-    app.saveToFile(app.currentFilename);
-  }
-}
-
-// Status updates
-function updateStatus(message) {
-  const statusEl = document.getElementById('statusBar');
-  if (statusEl) {
-    const filenameEl = statusEl.querySelector('.current-filename');
-    const questionCountEl = statusEl.querySelector('.question-count');
-    const statusMsgEl = statusEl.querySelector('.status-message');
-
-    if (filenameEl) filenameEl.textContent = app.currentFilename;
-    if (questionCountEl) questionCountEl.textContent = `${app.questions.length} question${app.questions.length !== 1 ? 's' : ''}`;
-    if (statusMsgEl) statusMsgEl.textContent = message;
-
-    // Auto-hide status message after 3 seconds
-    if (statusMsgEl && message) {
-      setTimeout(() => {
-        statusMsgEl.textContent = '';
-      }, 3000);
-    }
-  }
-}
+// =============================================================================
+// VIEW MANAGEMENT
+// =============================================================================
 
 function showView(viewName) {
   // Hide all views
@@ -282,8 +269,8 @@ function showView(viewName) {
   document.getElementById(viewName + 'View').classList.add('active');
 
   // Update navigation
-  document.querySelectorAll('nav button').forEach(btn => {
-    btn.classList.remove('active');
+  document.querySelectorAll('nav a').forEach(link => {
+    link.classList.remove('active');
   });
   document.getElementById('nav' + viewName.charAt(0).toUpperCase() + viewName.slice(1))
     .classList.add('active');
@@ -292,76 +279,147 @@ function showView(viewName) {
   if (viewName === 'list') {
     renderQuestionList();
   } else if (viewName === 'validate') {
-    renderValidationResults();
+    renderValidationView();
   } else if (viewName === 'create') {
     resetForm();
   }
+
+  updateStatusBar();
 }
+
+function updateStatusBar() {
+  document.getElementById('statusFilename').textContent = app.currentFilename;
+  document.getElementById('statusCount').textContent = app.questions.length;
+  if (app.unsavedChanges) {
+    document.getElementById('statusUnsaved').style.display = 'inline';
+  } else {
+    document.getElementById('statusUnsaved').style.display = 'none';
+  }
+}
+
+function showMessage(message) {
+  const msgEl = document.getElementById('statusMessage');
+  msgEl.textContent = message;
+  setTimeout(() => {
+    msgEl.textContent = '';
+  }, 3000);
+}
+
+// =============================================================================
+// STARTUP MODAL
+// =============================================================================
+
+function showStartupModal() {
+  const modal = document.getElementById('startupModal');
+  modal.style.display = 'block';
+
+  // Load from file
+  document.getElementById('startupLoadFile').onclick = () => {
+    document.getElementById('startupFileInput').click();
+  };
+
+  document.getElementById('startupFileInput').onchange = async (e) => {
+    if (e.target.files.length > 0) {
+      try {
+        const count = await app.loadFromFile(e.target.files[0]);
+        showMessage(`Loaded ${count} questions`);
+        modal.style.display = 'none';
+        showView('list');
+      } catch (err) {
+        alert('Load failed: ' + err);
+      }
+    }
+  };
+
+  // Load from server
+  if (app.serverAvailable) {
+    document.getElementById('startupLoadServer').style.display = 'block';
+    document.getElementById('startupLoadServer').onclick = async () => {
+      try {
+        await app.loadFromServer();
+        modal.style.display = 'none';
+        showView('list');
+      } catch (err) {
+        alert('Load from server failed: ' + err.message);
+      }
+    };
+  }
+
+  // Start new
+  document.getElementById('startupNew').onclick = () => {
+    modal.style.display = 'none';
+    showView('list');
+  };
+}
+
+function toggleServerButtons(available) {
+  const saveServerBtn = document.getElementById('saveServerBtn');
+  const loadServerBtn = document.getElementById('loadServerBtn');
+
+  if (saveServerBtn) saveServerBtn.style.display = available ? 'inline-block' : 'none';
+  if (loadServerBtn) loadServerBtn.style.display = available ? 'inline-block' : 'none';
+}
+
+// =============================================================================
+// QUESTION LIST VIEW
+// =============================================================================
 
 function renderQuestionList() {
   const container = document.getElementById('questionList');
   const questions = app.getAllQuestions();
 
   if (questions.length === 0) {
-    container.innerHTML = '<p class="empty-state">No questions yet. Create your first question!</p>';
+    container.innerHTML = '<p class="empty-message">No questions yet. Create your first question!</p>';
     return;
   }
 
-  let html = '<div class="question-cards">';
+  let html = '';
   questions.forEach((q, idx) => {
-    const langs = getQuestionLanguages(q);
-    const defaultLang = q.defaultLang || langs[0] || 'en';
-    const langData = getLanguageData(q, defaultLang);
-
-    const languageBadges = langs.map(lang =>
-      `<span class="lang-badge" title="${COMMON_LANGUAGES[lang] || lang}">${lang.toUpperCase()}</span>`
-    ).join('');
+    const langs = getAllQuestionLanguages(q);
+    const firstLang = langs[0] || 'en';
+    const title = q.QTitle[firstLang] || 'Untitled';
+    const desc = q.QDesc[firstLang] || '';
 
     html += `
       <div class="question-card">
         <div class="question-header">
-          <span class="question-type-badge">${q.QStruct}</span>
-          <span class="question-id">ID: ${q.QID}</span>
+          <span class="question-type">${q.QStruct}</span>
+          <span class="question-id">QID: ${q.QID}</span>
         </div>
-        <h3>${escapeHtml(langData?.QTitle || 'Untitled Question')}</h3>
-        <p class="question-desc">${escapeHtml(langData?.QDesc || 'No description')}</p>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="question-desc">${escapeHtml(desc)}</p>
         <div class="question-meta">
-          <span>Languages: ${languageBadges}</span>
-          <span>Items: ${q.QnI}</span>
-          <span>Relational: ${q.QRelB ? 'Yes' : 'No'}</span>
+          <span>Languages: ${langs.map(l => `<span class="lang-tag">${l}</span>`).join(' ')}</span>
+          ${q.Qni > 0 ? `<span>Items: ${q.Qni}</span>` : ''}
         </div>
         <div class="question-actions">
-          <button onclick="editQuestion(${idx}, '${defaultLang}')" class="btn-edit">Edit</button>
-          <button onclick="viewQuestion(${idx})" class="btn-view">View</button>
-          <button onclick="deleteQuestion(${idx})" class="btn-delete">Delete</button>
+          <button onclick="editQuestion(${idx})" class="btn-primary">Edit</button>
+          <button onclick="viewQuestion(${idx})" class="btn-secondary">View JSON</button>
+          <button onclick="validateSingleQuestion(${idx})" class="btn-secondary">Validate</button>
+          <button onclick="deleteQuestion(${idx})" class="btn-danger">Delete</button>
         </div>
       </div>
     `;
   });
-  html += '</div>';
+
   container.innerHTML = html;
 }
 
-function editQuestion(index, lang) {
+function editQuestion(index) {
   app.editingIndex = index;
   const question = app.getQuestion(index);
-  app.currentQuestion = JSON.parse(JSON.stringify(question)); // Deep copy
-  app.currentEditingLang = lang || question.defaultLang || 'en';
 
   showView('create');
-  populateForm(question, app.currentEditingLang);
+  populateForm(question);
 
   document.getElementById('formTitle').textContent = 'Edit Question';
-  document.getElementById('submitBtn').textContent = 'Update Question';
-
-  // Show language selector
-  setupLanguageSelector();
+  document.getElementById('submitBtn').textContent = 'Save Edit';
 }
 
 function viewQuestion(index) {
   const question = app.getQuestion(index);
   const modal = document.getElementById('viewModal');
-  const content = document.getElementById('modalContent');
+  const content = document.getElementById('viewModalContent');
 
   content.innerHTML = `<pre>${JSON.stringify(question, null, 2)}</pre>`;
   modal.style.display = 'block';
@@ -371,58 +429,144 @@ function deleteQuestion(index) {
   if (confirm('Are you sure you want to delete this question?')) {
     app.deleteQuestion(index);
     renderQuestionList();
+    updateStatusBar();
   }
 }
 
-function closeModal() {
+function closeViewModal() {
   document.getElementById('viewModal').style.display = 'none';
 }
 
+// =============================================================================
+// VALIDATION
+// =============================================================================
+
+function validateSingleQuestion(index) {
+  const question = app.getQuestion(index);
+  const result = validateQuestion(question);
+
+  const modal = document.getElementById('validationModal');
+  const content = document.getElementById('validationModalContent');
+
+  if (result.valid) {
+    content.innerHTML = `
+      <div class="validation-success">
+        <h3>✓ Question is Valid</h3>
+        <p>No errors found in QID ${question.QID}</p>
+      </div>
+    `;
+  } else {
+    content.innerHTML = `
+      <div class="validation-errors">
+        <h3>✗ Validation Errors</h3>
+        <p>QID: ${question.QID}</p>
+        <ul>
+          ${result.errors.map(err => `<li>${escapeHtml(err)}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  modal.style.display = 'block';
+}
+
+function closeValidationModal() {
+  document.getElementById('validationModal').style.display = 'none';
+}
+
+function renderValidationView() {
+  const container = document.getElementById('validationResults');
+  const questions = app.getAllQuestions();
+
+  if (questions.length === 0) {
+    container.innerHTML = '<p class="empty-message">No questions to validate.</p>';
+    return;
+  }
+
+  const results = questions.map((q, idx) => ({
+    index: idx,
+    question: q,
+    validation: validateQuestion(q)
+  }));
+
+  const validCount = results.filter(r => r.validation.valid).length;
+
+  let html = `
+    <div class="validation-summary">
+      <h3>Validation Summary</h3>
+      <p>${validCount} of ${questions.length} questions are valid</p>
+    </div>
+  `;
+
+  results.forEach(result => {
+    const statusClass = result.validation.valid ? 'valid' : 'invalid';
+    const firstLang = getAllQuestionLanguages(result.question)[0] || 'en';
+    const title = result.question.QTitle[firstLang] || 'Untitled';
+
+    html += `
+      <div class="validation-result ${statusClass}">
+        <div class="validation-header">
+          <span class="question-type">${result.question.QStruct}</span>
+          <span>QID: ${result.question.QID}</span>
+          <span class="validation-status">${result.validation.valid ? '✓ Valid' : '✗ Invalid'}</span>
+        </div>
+        <h4>${escapeHtml(title)}</h4>
+        ${!result.validation.valid ? `
+          <ul class="error-list">
+            ${result.validation.errors.map(err => `<li>${escapeHtml(err)}</li>`).join('')}
+          </ul>
+        ` : ''}
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// =============================================================================
+// FORM MANAGEMENT
+// =============================================================================
+
 function resetForm() {
   app.editingIndex = -1;
-  app.currentQuestion = null;
-  app.currentEditingLang = 'en';
   document.getElementById('questionForm').reset();
   document.getElementById('formTitle').textContent = 'Create New Question';
   document.getElementById('submitBtn').textContent = 'Create Question';
   updateFormForQuestionType(document.getElementById('questionType').value);
-
-  // Hide language selector for new questions
-  const langSelector = document.getElementById('languageSelector');
-  if (langSelector) langSelector.style.display = 'none';
 }
 
-function populateForm(question, lang) {
-  const editLang = lang || question.defaultLang || 'en';
-  const langData = getLanguageData(question, editLang);
-
-  if (!langData) {
-    alert(`Language ${editLang} not found in question. Using ${question.defaultLang}`);
-    return populateForm(question, question.defaultLang);
-  }
-
+function populateForm(question) {
   document.getElementById('questionType').value = question.QStruct;
-  document.getElementById('qLang').value = editLang;
-  document.getElementById('qTitle').value = langData.QTitle;
-  document.getElementById('qDesc').value = langData.QDesc;
   document.getElementById('qRelB').checked = question.QRelB;
   document.getElementById('qLearn').value = question.QLearn || '';
+  document.getElementById('enablingQID').value = question.EnablingQID || '';
+  document.getElementById('enablingAnswers').value = question.EnablingAnswers || '';
 
-  if (question.QStruct !== QUESTION_TYPES.FACTQ && question.QStruct !== QUESTION_TYPES.RANGQ) {
-    document.getElementById('qnI').value = question.QnI;
+  if (question.Qni > 0 && question.QStruct !== QUESTION_TYPES.FACTQ && question.QStruct !== QUESTION_TYPES.RANGQ) {
+    document.getElementById('qni').value = question.Qni;
   }
+
+  // Populate language fields
+  populateLanguageField('qTitle', question.QTitle);
+  populateLanguageField('qDesc', question.QDesc);
 
   updateFormForQuestionType(question.QStruct);
 
   // Populate type-specific fields
-  populateTypeSpecificFields(question, editLang);
+  populateTypeSpecificFields(question);
 }
+
+// (Rest of code continues on next edit...)
+
+// =============================================================================
+// TYPE-SPECIFIC FORM HANDLING
+// =============================================================================
 
 function updateFormForQuestionType(type) {
   const container = document.getElementById('typeSpecificFields');
   const qniContainer = document.getElementById('qniContainer');
 
-  // Show/hide QnI based on type
+  // Show/hide Qni based on type
   if (type === QUESTION_TYPES.FACTQ || type === QUESTION_TYPES.RANGQ) {
     qniContainer.style.display = 'none';
   } else {
@@ -433,577 +577,372 @@ function updateFormForQuestionType(type) {
 
   switch(type) {
     case QUESTION_TYPES.AORBQ:
-      html = `
-        <div class="form-group">
-          <label for="qPref1">Preference 1 (short) *</label>
-          <input type="text" id="qPref1" required maxlength="80">
-        </div>
-        <div class="form-group">
-          <label for="qPref2">Preference 2 (short) *</label>
-          <input type="text" id="qPref2" required maxlength="80">
-        </div>
-        <div class="form-group">
-          <label for="qPrefer1">Preference 1 (long description)</label>
-          <textarea id="qPrefer1" rows="3"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="qPrefer2">Preference 2 (long description)</label>
-          <textarea id="qPrefer2" rows="3"></textarea>
-        </div>
-      `;
+      html = '<h4>Preference Options</h4>' +
+             '<div class="form-group"><label>Preference 1 (short) *</label><div id="qPref1_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (short) *</label><div id="qPref2_container"></div></div>' +
+             '<div class="form-group"><label>Preference 1 (description)</label><div id="qPrefer1_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (description)</label><div id="qPrefer2_container"></div></div>';
       break;
 
     case QUESTION_TYPES.FACTQ:
-      html = '<p class="info">FACTQ questions use standard Yes/No/Don\'t Know responses. No additional fields required.</p>';
+      html = '<p class="info-text">FACTQ uses Yes/No/Don\'t Know responses. No additional fields needed.</p>';
       break;
 
     case QUESTION_TYPES.LEVLQ:
-      html = `
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="qSchB">
-            Use predefined scheme
-          </label>
-        </div>
-        <div class="form-group" id="schemeField" style="display: none;">
-          <label for="qScheme">Scheme URI</label>
-          <input type="text" id="qScheme">
-        </div>
-        <div id="levlqItems">
-          <button type="button" onclick="generateLevlqItems()" class="btn-secondary">Generate Level Items</button>
-          <div id="levlqItemsList"></div>
-        </div>
-      `;
+      html = '<h4>Level Options</h4>' +
+             '<div class="form-group"><label><input type="checkbox" id="qSchB"> Use predefined scheme</label></div>' +
+             '<div id="schemeFieldContainer" style="display:none;"><label>Scheme URI</label><input type="text" id="qScheme"></div>' +
+             '<div id="itemsContainer"></div>';
       break;
 
     case QUESTION_TYPES.LIKSQ:
-      html = `
-        <div class="form-group">
-          <label for="qPos">Position Statement (optional)</label>
-          <textarea id="qPos" rows="2"></textarea>
-          <small>If not provided, QTitle will be used</small>
-        </div>
-      `;
+      html = '<h4>Likert Scale</h4>' +
+             '<div class="form-group"><label>Position Statement (optional)</label><div id="qPos_container"></div>' +
+             '<small>If not provided, QTitle will be used</small></div>';
       break;
 
     case QUESTION_TYPES.OPTSQ:
-      html = `
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="qMultiB">
-            Allow multiple selections
-          </label>
-        </div>
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="qOtherB">
-            Include "Other" option
-          </label>
-        </div>
-        <div id="optsqItems">
-          <button type="button" onclick="generateOptsqItems()" class="btn-secondary">Generate Option Items</button>
-          <div id="optsqItemsList"></div>
-        </div>
-      `;
+      html = '<h4>Options</h4>' +
+             '<div class="form-group"><label><input type="checkbox" id="qMultiB"> Allow multiple selections</label></div>' +
+             '<div class="form-group"><label><input type="checkbox" id="qOtherB"> Include "Other" option</label></div>' +
+             '<div id="itemsContainer"></div>';
       break;
 
     case QUESTION_TYPES.RANGQ:
-      html = `
-        <div class="form-group">
-          <label for="qsUnit">Unit of Measurement *</label>
-          <input type="text" id="qsUnit" required placeholder="e.g., kg, cm, years">
-        </div>
-        <div class="form-group">
-          <label for="qsMin">Minimum Value *</label>
-          <input type="number" id="qsMin" required step="any">
-        </div>
-        <div class="form-group">
-          <label for="qsMax">Maximum Value *</label>
-          <input type="number" id="qsMax" required step="any">
-        </div>
-        <div class="form-group">
-          <label for="qsGran">Granularity (rounding)</label>
-          <input type="number" id="qsGran" value="1" step="any">
-        </div>
-      `;
+      html = '<h4>Range Settings</h4>' +
+             '<div class="form-group"><label>Unit *</label><input type="text" id="qsUnit" required></div>' +
+             '<div class="form-group"><label>Minimum *</label><input type="number" id="qsMin" required step="any" value="0"></div>' +
+             '<div class="form-group"><label>Maximum *</label><input type="number" id="qsMax" required step="any" value="100"></div>' +
+             '<div class="form-group"><label>Granularity</label><input type="number" id="qsGran" step="any" value="1"></div>';
       break;
 
     case QUESTION_TYPES.TRIPQ:
-      html = `
-        <div class="form-group">
-          <label for="qPref1">Preference 1 (short) *</label>
-          <input type="text" id="qPref1" required maxlength="80">
-        </div>
-        <div class="form-group">
-          <label for="qMidP">Midpoint (short) *</label>
-          <input type="text" id="qMidP" required maxlength="80">
-        </div>
-        <div class="form-group">
-          <label for="qPref2">Preference 2 (short) *</label>
-          <input type="text" id="qPref2" required maxlength="80">
-        </div>
-        <div class="form-group">
-          <label for="qPrefer1">Preference 1 (long description)</label>
-          <textarea id="qPrefer1" rows="2"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="qMiddle">Midpoint (long description)</label>
-          <textarea id="qMiddle" rows="2"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="qPrefer2">Preference 2 (long description)</label>
-          <textarea id="qPrefer2" rows="2"></textarea>
-        </div>
-      `;
+      html = '<h4>Triple Preference Options</h4>' +
+             '<div class="form-group"><label>Preference 1 (short) *</label><div id="qPref1_container"></div></div>' +
+             '<div class="form-group"><label>Midpoint (short) *</label><div id="qMidP_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (short) *</label><div id="qPref2_container"></div></div>' +
+             '<div class="form-group"><label>Preference 1 (description)</label><div id="qPrefer1_container"></div></div>' +
+             '<div class="form-group"><label>Midpoint (description)</label><div id="qMiddle_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (description)</label><div id="qPrefer2_container"></div></div>';
       break;
   }
 
   container.innerHTML = html;
 
-  // Add event listeners for dynamic fields
+  // Setup event listeners
   if (type === QUESTION_TYPES.LEVLQ) {
     document.getElementById('qSchB').addEventListener('change', (e) => {
-      document.getElementById('schemeField').style.display = e.target.checked ? 'block' : 'none';
+      document.getElementById('schemeFieldContainer').style.display = e.target.checked ? 'block' : 'none';
     });
   }
+
+  // Render items section if needed
+  if (type === QUESTION_TYPES.LEVLQ || type === QUESTION_TYPES.OPTSQ) {
+    renderItemsSection(type);
+  }
 }
 
-function populateTypeSpecificFields(question, lang) {
+function populateTypeSpecificFields(question) {
   const type = question.QStruct;
-  const editLang = lang || app.currentEditingLang || question.defaultLang || 'en';
-  const langData = getLanguageData(question, editLang);
-
-  if (!langData || !langData.QDetails) return;
-
-  const details = langData.QDetails;
+  const details = question.QDetails;
 
   if (type === QUESTION_TYPES.AORBQ || type === QUESTION_TYPES.TRIPQ) {
-    if (document.getElementById('qPref1')) {
-      document.getElementById('qPref1').value = details.QPref1 || '';
-      document.getElementById('qPref2').value = details.QPref2 || '';
-      document.getElementById('qPrefer1').value = details.QPrefer1 || '';
-      document.getElementById('qPrefer2').value = details.QPrefer2 || '';
-    }
+    renderLanguageField('qPref1', details.QPref1);
+    renderLanguageField('qPref2', details.QPref2);
+    renderLanguageField('qPrefer1', details.QPrefer1);
+    renderLanguageField('qPrefer2', details.QPrefer2);
 
     if (type === QUESTION_TYPES.TRIPQ) {
-      document.getElementById('qMidP').value = details.QMidP || '';
-      document.getElementById('qMiddle').value = details.QMiddle || '';
+      renderLanguageField('qMidP', details.QMidP);
+      renderLanguageField('qMiddle', details.QMiddle);
     }
-  } else if (type === QUESTION_TYPES.LIKSQ) {
-    document.getElementById('qPos').value = details.QPos || '';
-  } else if (type === QUESTION_TYPES.RANGQ) {
-    document.getElementById('qsUnit').value = details.QSUnit || '';
-    document.getElementById('qsMin').value = details.QSMin || 0;
-    document.getElementById('qsMax').value = details.QSMax || 0;
-    document.getElementById('qsGran').value = details.QSGran || 1;
-  } else if (type === QUESTION_TYPES.LEVLQ) {
-    document.getElementById('qSchB').checked = details.QSchB || false;
-    document.getElementById('schemeField').style.display = details.QSchB ? 'block' : 'none';
-    if (details.QScheme) {
-      document.getElementById('qScheme').value = details.QScheme;
-    }
+  }
+
+  if (type === QUESTION_TYPES.LIKSQ) {
+    renderLanguageField('qPos', details.QPos);
+  }
+
+  if (type === QUESTION_TYPES.LEVLQ) {
+    setChecked('qSchB', details.QSchB);
+    document.getElementById('schemeFieldContainer').style.display = details.QSchB ? 'block' : 'none';
+    setValue('qScheme', details.QScheme);
     if (details.items && details.items.length > 0) {
-      generateLevlqItems();
-      details.items.forEach((item, idx) => {
-        document.getElementById(`levlq_short_${idx}`).value = item.QItemShort || '';
-        document.getElementById(`levlq_long_${idx}`).value = item.QItemLong || '';
-        document.getElementById(`levlq_val_${idx}`).value = item.QItemVal || idx + 1;
-      });
+      renderItemsWithData(question);
     }
-  } else if (type === QUESTION_TYPES.OPTSQ) {
-    document.getElementById('qMultiB').checked = details.QMultiB || false;
-    document.getElementById('qOtherB').checked = details.QOtherB || false;
+  }
+
+  if (type === QUESTION_TYPES.OPTSQ) {
+    setChecked('qMultiB', details.QMultiB);
+    setChecked('qOtherB', details.QOtherB);
     if (details.items && details.items.length > 0) {
-      generateOptsqItems();
-      details.items.forEach((item, idx) => {
-        document.getElementById(`optsq_short_${idx}`).value = item.QItemShort || '';
-        document.getElementById(`optsq_long_${idx}`).value = item.QItemLong || '';
-      });
+      renderItemsWithData(question);
     }
+  }
+
+  if (type === QUESTION_TYPES.RANGQ) {
+    setValue('qsUnit', details.QSUnit);
+    setValue('qsMin', details.QSMin);
+    setValue('qsMax', details.QSMax);
+    setValue('qsGran', details.QSGran);
   }
 }
 
-function generateLevlqItems() {
-  const qni = parseInt(document.getElementById('qnI').value) || 5;
-  const container = document.getElementById('levlqItemsList');
+// =============================================================================
+// ITEM MANAGEMENT
+// =============================================================================
 
-  let html = '<h4>Level Items</h4>';
-  for (let i = 0; i < qni; i++) {
-    html += `
-      <div class="item-group">
-        <h5>Level ${i + 1}</h5>
-        <input type="text" id="levlq_short_${i}" placeholder="Short description" maxlength="80">
-        <textarea id="levlq_long_${i}" placeholder="Long description" rows="2"></textarea>
-        <input type="number" id="levlq_val_${i}" placeholder="Value" value="${i + 1}">
-      </div>
-    `;
-  }
+function renderItemsSection(type) {
+  const container = document.getElementById('itemsContainer');
+  if (!container) return;
+
+  let html = '<div class="items-section">';
+  html += '<div class="items-header">';
+  html += '<h4>Items</h4>';
+  html += '<button type="button" onclick="addNewItemToForm()" class="btn-add">+ Add Item</button>';
+  html += '</div>';
+  html += '<div id="itemsList"></div>';
+  html += '</div>';
+
   container.innerHTML = html;
 }
 
-function generateOptsqItems() {
-  const qni = parseInt(document.getElementById('qnI').value) || 5;
-  const container = document.getElementById('optsqItemsList');
+function renderItemsWithData(question) {
+  const items = question.QDetails.items || [];
+  const itemsList = document.getElementById('itemsList');
+  if (!itemsList) return;
 
-  let html = '<h4>Option Items</h4>';
+  let html = '';
+
+  items.forEach((item, idx) => {
+    html += '<div class="item-box" data-item-index="' + idx + '">';
+    html += '<div class="item-box-header">';
+    html += '<span>Item ' + (idx + 1) + '</span>';
+    
+    if (items.length > 2) {
+      html += '<button type="button" onclick="removeItemFromForm(' + idx + ')" class="btn-danger">Remove</button>';
+    }
+    
+    html += '</div>';
+    html += '<div class="form-group"><label>Short description *</label><div id="item' + idx + 'Short_container"></div></div>';
+    html += '<div class="form-group"><label>Long description</label><div id="item' + idx + 'Long_container"></div></div>';
+    
+    if (question.QStruct === QUESTION_TYPES.LEVLQ) {
+      html += '<div class="form-group"><label>Value</label><input type="number" id="item' + idx + 'Val" value="' + (item.QItemVal || idx + 1) + '"></div>';
+    }
+    
+    html += '</div>';
+  });
+
+  itemsList.innerHTML = html;
+
+  // Render language fields for each item
+  items.forEach((item, idx) => {
+    renderLanguageField('item' + idx + 'Short', item.QItemShort);
+    renderLanguageField('item' + idx + 'Long', item.QItemLong);
+  });
+}
+
+function addNewItemToForm() {
+  const qni = parseInt(document.getElementById('qni').value) || 5;
+  document.getElementById('qni').value = qni + 1;
+
+  const type = document.getElementById('questionType').value;
+  
+  // Create a temporary question to hold the new item structure
+  const tempQuestion = {
+    QStruct: type,
+    Qni: qni + 1,
+    QDetails: {
+      items: []
+    }
+  };
+
+  // Collect existing items
   for (let i = 0; i < qni; i++) {
-    html += `
-      <div class="item-group">
-        <h5>Option ${i + 1}</h5>
-        <input type="text" id="optsq_short_${i}" placeholder="Short description" maxlength="80">
-        <textarea id="optsq_long_${i}" placeholder="Long description" rows="2"></textarea>
-      </div>
-    `;
+    const itemShort = collectLanguageFieldFromForm('item' + i + 'Short');
+    const itemLong = collectLanguageFieldFromForm('item' + i + 'Long');
+    const item = { QItemShort: itemShort, QItemLong: itemLong };
+    
+    if (type === QUESTION_TYPES.LEVLQ) {
+      item.QItemVal = parseInt(getTrimmedValue('item' + i + 'Val')) || (i + 1);
+    }
+    
+    tempQuestion.QDetails.items.push(item);
   }
-  container.innerHTML = html;
+
+  // Add new empty item
+  const newItem = {
+    QItemShort: createLangField('en'),
+    QItemLong: createLangField('en')
+  };
+  
+  if (type === QUESTION_TYPES.LEVLQ) {
+    newItem.QItemVal = qni + 1;
+  }
+  
+  tempQuestion.QDetails.items.push(newItem);
+
+  // Re-render
+  renderItemsWithData(tempQuestion);
 }
 
-// Helper function to get trimmed value from element
-function getTrimmedValue(elementId) {
-  const el = document.getElementById(elementId);
-  return el ? el.value.trim() : '';
+function removeItemFromForm(index) {
+  if (!confirm('Remove this item?')) return;
+
+  const type = document.getElementById('questionType').value;
+  const qni = parseInt(document.getElementById('qni').value) || 5;
+
+  if (qni <= 2) {
+    alert('Must have at least 2 items');
+    return;
+  }
+
+  // Collect all items except the one being removed
+  const tempQuestion = {
+    QStruct: type,
+    Qni: qni - 1,
+    QDetails: { items: [] }
+  };
+
+  for (let i = 0; i < qni; i++) {
+    if (i !== index) {
+      const itemShort = collectLanguageFieldFromForm('item' + i + 'Short');
+      const itemLong = collectLanguageFieldFromForm('item' + i + 'Long');
+      const item = { QItemShort: itemShort, QItemLong: itemLong };
+      
+      if (type === QUESTION_TYPES.LEVLQ) {
+        item.QItemVal = tempQuestion.QDetails.items.length + 1;
+      }
+      
+      tempQuestion.QDetails.items.push(item);
+    }
+  }
+
+  // Update Qni
+  document.getElementById('qni').value = qni - 1;
+
+  // Re-render
+  renderItemsWithData(tempQuestion);
 }
+
+// =============================================================================
+// FORM SUBMISSION
+// =============================================================================
 
 function handleFormSubmit(e) {
   e.preventDefault();
 
   const type = document.getElementById('questionType').value;
-  const editLang = getTrimmedValue('qLang');
   let question;
 
-  // If editing existing question, start with that; otherwise create new
+  // Start with existing question or create new
   if (app.editingIndex >= 0) {
-    question = JSON.parse(JSON.stringify(app.getQuestion(app.editingIndex))); // Deep copy
+    question = app.getQuestion(app.editingIndex);
   } else {
-    question = createQuestion(type, editLang);
+    question = createQuestion(type, 'en');
   }
 
-  // Populate common fields (language-independent)
+  // Collect common fields
   question.QRelB = document.getElementById('qRelB').checked;
   question.QLearn = getTrimmedValue('qLearn');
+  
+  const enablingQID = getTrimmedValue('enablingQID');
+  question.EnablingQID = enablingQID ? parseInt(enablingQID) : null;
+  question.EnablingAnswers = getTrimmedValue('enablingAnswers') || null;
 
+  // Collect Qni
   if (type !== QUESTION_TYPES.FACTQ && type !== QUESTION_TYPES.RANGQ) {
-    question.QnI = parseInt(document.getElementById('qnI').value);
+    question.Qni = parseInt(getTrimmedValue('qni')) || 5;
   }
 
-  // Ensure the language exists in the question
-  if (!question.languages[editLang]) {
-    question.languages[editLang] = {
-      QTitle: '',
-      QDesc: '',
-      QDetails: {}
-    };
+  // Collect language fields
+  question.QTitle = collectLanguageFieldFromForm('qTitle');
+  question.QDesc = collectLanguageFieldFromForm('qDesc');
+
+  // Collect type-specific fields
+  question.QDetails = collectTypeSpecificDetails(type, question.Qni);
+
+  // Validate
+  const validation = validateQuestion(question);
+  if (!validation.valid) {
+    const msg = 'Validation issues:\\n\\n' + validation.errors.join('\\n') + '\\n\\nSave anyway?';
+    if (!confirm(msg)) return;
   }
 
-  // Get reference to the language data we're editing
-  const langData = question.languages[editLang];
+  // Save
+  if (app.editingIndex >= 0) {
+    app.updateQuestion(app.editingIndex, question);
+    showMessage('Question updated');
+  } else {
+    app.addQuestion(question);
+    showMessage('Question created');
+  }
 
-  // Populate language-specific fields
-  langData.QTitle = getTrimmedValue('qTitle');
-  langData.QDesc = getTrimmedValue('qDesc');
+  showView('list');
+}
 
-  // Populate type-specific fields (with whitespace trimming)
+function collectTypeSpecificDetails(type, qni) {
+  const details = {};
+
   switch(type) {
     case QUESTION_TYPES.AORBQ:
-      langData.QDetails.QPref1 = getTrimmedValue('qPref1');
-      langData.QDetails.QPref2 = getTrimmedValue('qPref2');
-      langData.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
-      langData.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
+      details.QPref1 = collectLanguageFieldFromForm('qPref1');
+      details.QPref2 = collectLanguageFieldFromForm('qPref2');
+      details.QPrefer1 = collectLanguageFieldFromForm('qPrefer1');
+      details.QPrefer2 = collectLanguageFieldFromForm('qPrefer2');
+      break;
+
+    case QUESTION_TYPES.FACTQ:
+      // No additional details
       break;
 
     case QUESTION_TYPES.LEVLQ:
-      langData.QDetails.QSchB = document.getElementById('qSchB').checked;
-      if (langData.QDetails.QSchB) {
-        langData.QDetails.QScheme = getTrimmedValue('qScheme');
-        langData.QDetails.items = [];
-      } else {
-        langData.QDetails.items = [];
-        for (let i = 0; i < question.QnI; i++) {
-          const shortEl = document.getElementById(`levlq_short_${i}`);
-          const longEl = document.getElementById(`levlq_long_${i}`);
-          const valEl = document.getElementById(`levlq_val_${i}`);
-          if (shortEl) {
-            langData.QDetails.items.push({
-              QItemShort: shortEl.value.trim(),
-              QItemLong: longEl.value.trim(),
-              QItemVal: parseInt(valEl.value)
-            });
-          }
-        }
+      details.QSchB = document.getElementById('qSchB').checked;
+      details.QScheme = getTrimmedValue('qScheme');
+      details.items = [];
+      
+      for (let i = 0; i < qni; i++) {
+        details.items.push({
+          QItemShort: collectLanguageFieldFromForm('item' + i + 'Short'),
+          QItemLong: collectLanguageFieldFromForm('item' + i + 'Long'),
+          QItemVal: parseInt(getTrimmedValue('item' + i + 'Val')) || (i + 1)
+        });
       }
       break;
 
     case QUESTION_TYPES.LIKSQ:
-      langData.QDetails.QPos = getTrimmedValue('qPos');
+      details.QPos = collectLanguageFieldFromForm('qPos');
       break;
 
     case QUESTION_TYPES.OPTSQ:
-      langData.QDetails.QMultiB = document.getElementById('qMultiB').checked;
-      langData.QDetails.QOtherB = document.getElementById('qOtherB').checked;
-      langData.QDetails.items = [];
-      for (let i = 0; i < question.QnI; i++) {
-        const shortEl = document.getElementById(`optsq_short_${i}`);
-        const longEl = document.getElementById(`optsq_long_${i}`);
-        if (shortEl) {
-          langData.QDetails.items.push({
-            QItemShort: shortEl.value.trim(),
-            QItemLong: longEl.value.trim()
-          });
-        }
+      details.QMultiB = document.getElementById('qMultiB').checked;
+      details.QOtherB = document.getElementById('qOtherB').checked;
+      details.items = [];
+      
+      for (let i = 0; i < qni; i++) {
+        details.items.push({
+          QItemShort: collectLanguageFieldFromForm('item' + i + 'Short'),
+          QItemLong: collectLanguageFieldFromForm('item' + i + 'Long')
+        });
       }
       break;
 
     case QUESTION_TYPES.RANGQ:
-      langData.QDetails.QSUnit = getTrimmedValue('qsUnit');
-      langData.QDetails.QSMin = parseFloat(document.getElementById('qsMin').value);
-      langData.QDetails.QSMax = parseFloat(document.getElementById('qsMax').value);
-      langData.QDetails.QSGran = parseFloat(document.getElementById('qsGran').value);
+      details.QSUnit = getTrimmedValue('qsUnit');
+      details.QSMin = parseFloat(getTrimmedValue('qsMin'));
+      details.QSMax = parseFloat(getTrimmedValue('qsMax'));
+      details.QSGran = parseFloat(getTrimmedValue('qsGran'));
       break;
 
     case QUESTION_TYPES.TRIPQ:
-      langData.QDetails.QPref1 = getTrimmedValue('qPref1');
-      langData.QDetails.QPref2 = getTrimmedValue('qPref2');
-      langData.QDetails.QMidP = getTrimmedValue('qMidP');
-      langData.QDetails.QPrefer1 = getTrimmedValue('qPrefer1');
-      langData.QDetails.QPrefer2 = getTrimmedValue('qPrefer2');
-      langData.QDetails.QMiddle = getTrimmedValue('qMiddle');
+      details.QPref1 = collectLanguageFieldFromForm('qPref1');
+      details.QPref2 = collectLanguageFieldFromForm('qPref2');
+      details.QMidP = collectLanguageFieldFromForm('qMidP');
+      details.QPrefer1 = collectLanguageFieldFromForm('qPrefer1');
+      details.QPrefer2 = collectLanguageFieldFromForm('qPrefer2');
+      details.QMiddle = collectLanguageFieldFromForm('qMiddle');
       break;
   }
 
-  // Set default language if creating new question
-  if (app.editingIndex < 0) {
-    question.defaultLang = editLang;
-  }
-
-  // Validate before saving
-  const validation = validateQuestion(question);
-  if (!validation.valid) {
-    alert('Validation errors:\n' + validation.errors.join('\n'));
-    return;
-  }
-
-  // Save question
-  if (app.editingIndex >= 0) {
-    app.updateQuestion(app.editingIndex, question);
-  } else {
-    app.addQuestion(question);
-  }
-
-  alert('Question saved successfully!');
-  showView('list');
-}
-
-// Language selector and translation management
-function setupLanguageSelector() {
-  const question = app.getQuestion(app.editingIndex);
-  if (!question) return;
-
-  const langs = getQuestionLanguages(question);
-  const langSelectorDiv = document.getElementById('languageSelector');
-
-  if (!langSelectorDiv) {
-    // Create language selector if it doesn't exist
-    const formTitle = document.getElementById('formTitle');
-    const selector = document.createElement('div');
-    selector.id = 'languageSelector';
-    selector.className = 'language-selector';
-    formTitle.parentNode.insertBefore(selector, formTitle.nextSibling);
-  }
-
-  const selector = document.getElementById('languageSelector');
-  selector.style.display = 'flex';
-
-  let html = '<div class="lang-selector-content">';
-  html += '<label for="currentLangSelect">Editing Language:</label>';
-  html += '<select id="currentLangSelect" class="lang-select">';
-
-  langs.forEach(lang => {
-    const selected = lang === app.currentEditingLang ? 'selected' : '';
-    const langName = COMMON_LANGUAGES[lang] || lang;
-    html += `<option value="${lang}" ${selected}>${lang.toUpperCase()} - ${langName}</option>`;
-  });
-
-  html += '</select>';
-  html += '<button type="button" id="addTranslationBtn" class="btn-secondary">Add Translation</button>';
-  html += '</div>';
-
-  selector.innerHTML = html;
-
-  // Add event listeners
-  document.getElementById('currentLangSelect').addEventListener('change', (e) => {
-    switchEditingLanguage(e.target.value);
-  });
-
-  document.getElementById('addTranslationBtn').addEventListener('click', () => {
-    showAddTranslationDialog();
-  });
-}
-
-function switchEditingLanguage(newLang) {
-  const question = app.getQuestion(app.editingIndex);
-  if (!question || !question.languages[newLang]) return;
-
-  app.currentEditingLang = newLang;
-  populateForm(question, newLang);
-  setupLanguageSelector(); // Refresh selector to show current selection
-}
-
-function showAddTranslationDialog() {
-  const question = app.getQuestion(app.editingIndex);
-  if (!question) return;
-
-  const existingLangs = getQuestionLanguages(question);
-
-  // Create modal HTML
-  const modal = document.createElement('div');
-  modal.className = 'modal';
-  modal.id = 'addTranslationModal';
-  modal.style.display = 'block';
-
-  let html = '<div class="modal-content">';
-  html += '<div class="modal-header">';
-  html += '<h2>Add Translation</h2>';
-  html += '<button onclick="closeAddTranslationModal()" class="close-btn">&times;</button>';
-  html += '</div>';
-  html += '<div class="modal-body">';
-  html += '<div class="form-group">';
-  html += '<label for="newLangSelect">Select Language:</label>';
-  html += '<select id="newLangSelect" class="lang-select">';
-
-  // Add common languages that don't already exist
-  for (const [code, name] of Object.entries(COMMON_LANGUAGES)) {
-    if (code !== 'other' && !existingLangs.includes(code)) {
-      html += `<option value="${code}">${name}</option>`;
-    }
-  }
-  html += '<option value="other">Other (enter code)</option>';
-  html += '</select>';
-  html += '</div>';
-
-  html += '<div class="form-group" id="customLangGroup" style="display: none;">';
-  html += '<label for="customLangCode">Language Code (e.g., "pt", "sv"):</label>';
-  html += '<input type="text" id="customLangCode" maxlength="10" pattern="[a-z]{2,10}">';
-  html += '</div>';
-
-  html += '<div class="form-group">';
-  html += '<label>';
-  html += '<input type="checkbox" id="copyFromExisting"> Copy from existing language';
-  html += '</label>';
-  html += '</div>';
-
-  html += '<div class="form-group" id="copyFromGroup" style="display: none;">';
-  html += '<label for="copyFromLang">Copy from:</label>';
-  html += '<select id="copyFromLang" class="lang-select">';
-  existingLangs.forEach(lang => {
-    const langName = COMMON_LANGUAGES[lang] || lang;
-    html += `<option value="${lang}">${lang.toUpperCase()} - ${langName}</option>`;
-  });
-  html += '</select>';
-  html += '</div>';
-
-  html += '<div class="form-actions">';
-  html += '<button onclick="addTranslation()" class="btn-primary">Add Translation</button>';
-  html += '<button onclick="closeAddTranslationModal()" class="btn-secondary">Cancel</button>';
-  html += '</div>';
-  html += '</div></div>';
-
-  modal.innerHTML = html;
-  document.body.appendChild(modal);
-
-  // Add event listeners
-  document.getElementById('newLangSelect').addEventListener('change', (e) => {
-    document.getElementById('customLangGroup').style.display =
-      e.target.value === 'other' ? 'block' : 'none';
-  });
-
-  document.getElementById('copyFromExisting').addEventListener('change', (e) => {
-    document.getElementById('copyFromGroup').style.display =
-      e.target.checked ? 'block' : 'none';
-  });
-}
-
-function closeAddTranslationModal() {
-  const modal = document.getElementById('addTranslationModal');
-  if (modal) modal.remove();
-}
-
-function addTranslation() {
-  const question = app.getQuestion(app.editingIndex);
-  if (!question) return;
-
-  let newLang = document.getElementById('newLangSelect').value;
-  if (newLang === 'other') {
-    newLang = document.getElementById('customLangCode').value.trim().toLowerCase();
-    if (!newLang || !/^[a-z]{2,10}$/.test(newLang)) {
-      alert('Please enter a valid language code (2-10 lowercase letters)');
-      return;
-    }
-  }
-
-  const copyFrom = document.getElementById('copyFromExisting').checked ?
-    document.getElementById('copyFromLang').value : null;
-
-  const result = addLanguageToQuestion(question, newLang, copyFrom);
-
-  if (!result.success) {
-    alert(result.error || 'Failed to add language');
-    return;
-  }
-
-  app.updateQuestion(app.editingIndex, question);
-  closeAddTranslationModal();
-
-  alert(`Translation added for ${newLang.toUpperCase()}${result.copied ? ' (copied from ' + copyFrom + ')' : ''}`);
-
-  // Switch to editing the new language
-  app.currentEditingLang = newLang;
-  populateForm(question, newLang);
-  setupLanguageSelector();
-}
-
-function renderValidationResults() {
-  const container = document.getElementById('validationResults');
-  const results = app.validateAll();
-
-  if (results.length === 0) {
-    container.innerHTML = '<p class="empty-state">No questions to validate.</p>';
-    return;
-  }
-
-  let html = '<div class="validation-list">';
-  results.forEach(result => {
-    const statusClass = result.validation.valid ? 'valid' : 'invalid';
-    html += `
-      <div class="validation-item ${statusClass}">
-        <div class="validation-header">
-          <span class="question-type-badge">${result.question.QStruct}</span>
-          <span>${escapeHtml(result.question.QTitle)}</span>
-          <span class="validation-status">${result.validation.valid ? '✓ Valid' : '✗ Invalid'}</span>
-        </div>
-        ${!result.validation.valid ? `
-          <div class="validation-errors">
-            <strong>Errors:</strong>
-            <ul>
-              ${result.validation.errors.map(err => `<li>${escapeHtml(err)}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  });
-  html += '</div>';
-
-  const validCount = results.filter(r => r.validation.valid).length;
-  const summary = `<div class="validation-summary">
-    <strong>Summary:</strong> ${validCount} of ${results.length} questions are valid
-  </div>`;
-
-  container.innerHTML = summary + html;
-}
-
-// Utility function
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  return details;
 }
