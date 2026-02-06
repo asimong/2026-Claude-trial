@@ -10,183 +10,179 @@
   <div class="container">
     <header>
       <h1>RegenCHOICE Question Manager</h1>
-      <p class="subtitle">Create, manage, and validate questions for your RegenCHOICE system</p>
+      <p class="subtitle">Create, manage, and validate questions</p>
     </header>
 
+    <!-- Navigation (link-style, not buttons) -->
     <nav>
-      <button id="navList" class="active">Question List</button>
-      <button id="navCreate">Create Question</button>
-      <button id="navValidate">Validate</button>
-      <div class="nav-actions">
-        <button id="saveBtn" class="btn-file" title="Save to current file">Save</button>
-        <button id="saveAsBtn" class="btn-file" title="Save to a new file">Save As...</button>
-        <button id="loadBtn" class="btn-file" title="Load from file(s)">Load...</button>
-        <button id="mergeBtn" class="btn-file" title="Merge from additional file(s)">Merge...</button>
-        <button id="uploadServerBtn" class="btn-server" title="Upload to server" style="display: none;">📤 Upload to Server</button>
-        <button id="loadServerBtn" class="btn-server" title="Load from server" style="display: none;">📥 Load from Server</button>
-        <input type="file" id="loadFile" accept=".json" multiple style="display: none;">
-        <input type="file" id="mergeFile" accept=".json" multiple style="display: none;">
-      </div>
+      <a href="#" id="navList" class="nav-link active">Question List</a>
+      <a href="#" id="navCreate" class="nav-link">Create Question</a>
+      <a href="#" id="navValidate" class="nav-link">Validate</a>
     </nav>
 
-    <!-- Status Bar -->
-    <div id="statusBar" class="status-bar">
-      <span class="status-item">File: <strong class="current-filename">regenchoice-questions.json</strong></span>
-      <span class="status-item">|</span>
-      <span class="status-item question-count">0 questions</span>
-      <span class="status-message"></span>
+    <!-- Action buttons (data-changing actions) -->
+    <div class="action-bar">
+      <button id="saveLocalBtn" class="btn-action">Save questions locally</button>
+      <button id="saveAsBtn" class="btn-action">Save with new filename</button>
+      <button id="loadLocalBtn" class="btn-action">Load from file</button>
+      <button id="saveServerBtn" class="btn-action" style="display:none;">Save questions to server</button>
+      <button id="loadServerBtn" class="btn-action" style="display:none;">Load from server</button>
+      <input type="file" id="loadFileInput" accept=".json" style="display:none;">
     </div>
 
-    <main>
-      <!-- List View -->
-      <div id="listView" class="view active">
-        <div class="view-header">
-          <h2>All Questions</h2>
-        </div>
-        <div id="questionList"></div>
-      </div>
-
-      <!-- Create/Edit View -->
-      <div id="createView" class="view">
-        <div class="view-header">
-          <h2 id="formTitle">Create New Question</h2>
-        </div>
-        <!-- Language selector appears here when editing -->
-        <div id="languageSelector" class="language-selector" style="display: none;"></div>
-        <form id="questionForm">
-          <div class="form-section">
-            <h3>Question Type</h3>
-            <div class="form-group">
-              <label for="questionType">Select Question Type *</label>
-              <select id="questionType" required>
-                <option value="AORBQ">AORBQ - Preference between two alternatives</option>
-                <option value="FACTQ">FACTQ - Factual Yes/No/Don't Know</option>
-                <option value="LEVLQ">LEVLQ - Ordered levels</option>
-                <option value="LIKSQ">LIKSQ - Likert scale</option>
-                <option value="OPTSQ">OPTSQ - Multiple choice options</option>
-                <option value="RANGQ">RANGQ - Numeric range</option>
-                <option value="TRIPQ">TRIPQ - Triple choice with midpoint</option>
-              </select>
-              <small id="typeDescription">A preference between two alternatives, A or B</small>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h3>Common Fields</h3>
-            <div class="form-group">
-              <label for="qLang">Language *</label>
-              <input type="text" id="qLang" value="en" required maxlength="10">
-              <small>Language code (e.g., en, es, fr). To add more languages, save this question first, then Edit it and use the "Add Translation" button.</small>
-            </div>
-
-            <div class="form-group">
-              <label for="qTitle">Question Title *</label>
-              <input type="text" id="qTitle" required maxlength="80">
-              <small>Short text, max 80 characters</small>
-            </div>
-
-            <div class="form-group">
-              <label for="qDesc">Question Description</label>
-              <textarea id="qDesc" rows="3"></textarea>
-              <small>Optional longer explanation</small>
-            </div>
-
-            <div class="form-group">
-              <label>
-                <input type="checkbox" id="qRelB">
-                Is this a relational question?
-              </label>
-              <small>Check if question relates two choosers, uncheck if it's a property</small>
-            </div>
-
-            <div class="form-group" id="qniContainer">
-              <label for="qnI">Number of Items (QnI) *</label>
-              <input type="number" id="qnI" value="5" min="2" max="10">
-              <small>For itemized questions (2-10). Default: 5</small>
-            </div>
-
-            <div class="form-group">
-              <label for="qLearn">Learning Resource Link</label>
-              <input type="url" id="qLearn" placeholder="https://...">
-              <small>Optional link to explanatory page</small>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h3>Type-Specific Fields</h3>
-            <div id="typeSpecificFields"></div>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" id="submitBtn" class="btn-primary">Create Question</button>
-            <button type="button" onclick="showView('list')" class="btn-secondary">Cancel</button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Validate View -->
-      <div id="validateView" class="view">
-        <div class="view-header">
-          <h2>Validation Results</h2>
-        </div>
-        <div id="validationResults"></div>
-      </div>
-    </main>
-
-    <!-- Modal for viewing question details -->
-    <div id="viewModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Question Details</h2>
-          <button onclick="closeModal()" class="close-btn">&times;</button>
-        </div>
-        <div id="modalContent"></div>
-      </div>
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span>File: <strong id="statusFilename">regenchoice-questions.json</strong></span>
+      <span>Questions: <strong id="statusCount">0</strong></span>
+      <span id="statusUnsaved" style="display:none;" class="unsaved-indicator">● Unsaved changes</span>
+      <span id="statusMessage" class="status-message"></span>
     </div>
 
-    <!-- Startup Modal for loading files -->
-    <div id="startupModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Welcome to RegenCHOICE Question Manager</h2>
-        </div>
-        <div class="modal-body">
-          <p>How would you like to begin?</p>
-          <div class="startup-options">
-            <div class="startup-option">
-              <h3>📥 Load from Server</h3>
-              <p>Load questions stored on the server.</p>
-              <p><small>Requires server API to be configured</small></p>
-              <button id="startupLoadServerBtn" class="btn-primary" style="display: none;">Load from Server</button>
-            </div>
-            <div class="startup-option">
-              <h3>📁 Load from File(s)</h3>
-              <p>Open one or more JSON files from your computer.</p>
-              <p><small>Tip: Select multiple files to merge them together</small></p>
-              <button id="startupLoadBtn" class="btn-primary">Load from File(s)...</button>
-              <input type="file" id="startupLoadFile" accept=".json" multiple style="display: none;">
-            </div>
-            <div class="startup-option">
-              <h3>✨ Start Fresh</h3>
-              <p>Begin with an empty question set.</p>
-              <p><small>You can load files later using the Load button</small></p>
-              <button id="startupNewBtn" class="btn-secondary">Start with Empty Set</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- VIEWS -->
+
+    <!-- Question List View -->
+    <div id="listView" class="view active">
+      <h2>Questions</h2>
+      <div id="questionList"></div>
     </div>
 
-    <footer>
-      <p>RegenCHOICE Question Management System</p>
-      <p class="footer-links">
-        <a href="https://wiki.simongrant.org/doku.php/ch:index" target="_blank">Documentation</a> |
-        <a href="https://wiki.simongrant.org/doku.php/ch:qs:here" target="_blank">Question Specs</a>
-      </p>
-    </footer>
+    <!-- Create/Edit Question View -->
+    <div id="createView" class="view">
+      <h2 id="formTitle">Create New Question</h2>
+
+      <form id="questionForm">
+        <!-- Question Type -->
+        <div class="form-group">
+          <label for="questionType">Question Type *</label>
+          <select id="questionType" required>
+            <option value="AORBQ">AORBQ - A or B preference</option>
+            <option value="FACTQ">FACTQ - Factual yes/no</option>
+            <option value="LEVLQ">LEVLQ - Ordered levels</option>
+            <option value="LIKSQ">LIKSQ - Likert scale</option>
+            <option value="OPTSQ">OPTSQ - Options list</option>
+            <option value="RANGQ">RANGQ - Numeric range</option>
+            <option value="TRIPQ">TRIPQ - Triple preference</option>
+          </select>
+        </div>
+
+        <!-- Common Fields -->
+        <div class="form-group">
+          <label for="qTitle">Question Title * (max 80 chars)</label>
+          <div id="qTitle_container"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="qDesc">Description</label>
+          <div id="qDesc_container"></div>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="qRelB">
+            Relational question (QRelB)
+          </label>
+        </div>
+
+        <div id="qniContainer" class="form-group">
+          <label for="qni">Number of items (Qni)</label>
+          <input type="number" id="qni" min="2" max="10" value="5">
+        </div>
+
+        <div class="form-group">
+          <label for="qLearn">Learning resource URL (QLearn)</label>
+          <input type="url" id="qLearn" placeholder="https://...">
+        </div>
+
+        <!-- Enabling Questions -->
+        <div class="form-section">
+          <h3>Enabling Conditions (Optional)</h3>
+          <div class="form-group">
+            <label for="enablingQID">Enabling Question ID</label>
+            <input type="number" id="enablingQID" placeholder="Question ID that enables this">
+          </div>
+
+          <div class="form-group">
+            <label for="enablingAnswers">Enabling Answers</label>
+            <input type="text" id="enablingAnswers" placeholder="Answer values that enable this question">
+            <small>Format TBD - placeholder field</small>
+          </div>
+        </div>
+
+        <!-- Type-Specific Fields (populated dynamically) -->
+        <div id="typeSpecificFields"></div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button type="submit" id="submitBtn" class="btn-primary">Create Question</button>
+          <button type="button" onclick="showView('list')" class="btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Validation View -->
+    <div id="validateView" class="view">
+      <h2>Validation Results</h2>
+      <div id="validationResults"></div>
+    </div>
+
   </div>
 
+  <!-- MODALS -->
+
+  <!-- Startup Modal -->
+  <div id="startupModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>Welcome to RegenCHOICE Question Manager</h2>
+      <p>How would you like to begin?</p>
+
+      <div class="startup-options">
+        <div class="startup-option">
+          <h3>Load from File</h3>
+          <p>Open a JSON file from your computer</p>
+          <button id="startupLoadFile" class="btn-primary">Load from File</button>
+          <input type="file" id="startupFileInput" accept=".json" style="display:none;">
+        </div>
+
+        <div class="startup-option" id="startupServerOption" style="display:none;">
+          <h3>Load from Server</h3>
+          <p>Load questions from the server</p>
+          <button id="startupLoadServer" class="btn-primary">Load from Server</button>
+        </div>
+
+        <div class="startup-option">
+          <h3>Start Fresh</h3>
+          <p>Begin with an empty question set</p>
+          <button id="startupNew" class="btn-secondary">Start Empty</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Question Modal -->
+  <div id="viewModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Question JSON</h2>
+        <button onclick="closeViewModal()" class="modal-close">×</button>
+      </div>
+      <div id="viewModalContent"></div>
+    </div>
+  </div>
+
+  <!-- Validation Modal -->
+  <div id="validationModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Validation Result</h2>
+        <button onclick="closeValidationModal()" class="modal-close">×</button>
+      </div>
+      <div id="validationModalContent"></div>
+    </div>
+  </div>
+
+  <!-- Load Scripts -->
   <script src="question-data.js"></script>
+  <script src="app-helpers.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

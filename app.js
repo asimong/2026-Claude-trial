@@ -556,4 +556,393 @@ function populateForm(question) {
   populateTypeSpecificFields(question);
 }
 
-// This will be continued in next message...
+// (Rest of code continues on next edit...)
+
+// =============================================================================
+// TYPE-SPECIFIC FORM HANDLING
+// =============================================================================
+
+function updateFormForQuestionType(type) {
+  const container = document.getElementById('typeSpecificFields');
+  const qniContainer = document.getElementById('qniContainer');
+
+  // Show/hide Qni based on type
+  if (type === QUESTION_TYPES.FACTQ || type === QUESTION_TYPES.RANGQ) {
+    qniContainer.style.display = 'none';
+  } else {
+    qniContainer.style.display = 'block';
+  }
+
+  let html = '';
+
+  switch(type) {
+    case QUESTION_TYPES.AORBQ:
+      html = '<h4>Preference Options</h4>' +
+             '<div class="form-group"><label>Preference 1 (short) *</label><div id="qPref1_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (short) *</label><div id="qPref2_container"></div></div>' +
+             '<div class="form-group"><label>Preference 1 (description)</label><div id="qPrefer1_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (description)</label><div id="qPrefer2_container"></div></div>';
+      break;
+
+    case QUESTION_TYPES.FACTQ:
+      html = '<p class="info-text">FACTQ uses Yes/No/Don\'t Know responses. No additional fields needed.</p>';
+      break;
+
+    case QUESTION_TYPES.LEVLQ:
+      html = '<h4>Level Options</h4>' +
+             '<div class="form-group"><label><input type="checkbox" id="qSchB"> Use predefined scheme</label></div>' +
+             '<div id="schemeFieldContainer" style="display:none;"><label>Scheme URI</label><input type="text" id="qScheme"></div>' +
+             '<div id="itemsContainer"></div>';
+      break;
+
+    case QUESTION_TYPES.LIKSQ:
+      html = '<h4>Likert Scale</h4>' +
+             '<div class="form-group"><label>Position Statement (optional)</label><div id="qPos_container"></div>' +
+             '<small>If not provided, QTitle will be used</small></div>';
+      break;
+
+    case QUESTION_TYPES.OPTSQ:
+      html = '<h4>Options</h4>' +
+             '<div class="form-group"><label><input type="checkbox" id="qMultiB"> Allow multiple selections</label></div>' +
+             '<div class="form-group"><label><input type="checkbox" id="qOtherB"> Include "Other" option</label></div>' +
+             '<div id="itemsContainer"></div>';
+      break;
+
+    case QUESTION_TYPES.RANGQ:
+      html = '<h4>Range Settings</h4>' +
+             '<div class="form-group"><label>Unit *</label><input type="text" id="qsUnit" required></div>' +
+             '<div class="form-group"><label>Minimum *</label><input type="number" id="qsMin" required step="any" value="0"></div>' +
+             '<div class="form-group"><label>Maximum *</label><input type="number" id="qsMax" required step="any" value="100"></div>' +
+             '<div class="form-group"><label>Granularity</label><input type="number" id="qsGran" step="any" value="1"></div>';
+      break;
+
+    case QUESTION_TYPES.TRIPQ:
+      html = '<h4>Triple Preference Options</h4>' +
+             '<div class="form-group"><label>Preference 1 (short) *</label><div id="qPref1_container"></div></div>' +
+             '<div class="form-group"><label>Midpoint (short) *</label><div id="qMidP_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (short) *</label><div id="qPref2_container"></div></div>' +
+             '<div class="form-group"><label>Preference 1 (description)</label><div id="qPrefer1_container"></div></div>' +
+             '<div class="form-group"><label>Midpoint (description)</label><div id="qMiddle_container"></div></div>' +
+             '<div class="form-group"><label>Preference 2 (description)</label><div id="qPrefer2_container"></div></div>';
+      break;
+  }
+
+  container.innerHTML = html;
+
+  // Setup event listeners
+  if (type === QUESTION_TYPES.LEVLQ) {
+    document.getElementById('qSchB').addEventListener('change', (e) => {
+      document.getElementById('schemeFieldContainer').style.display = e.target.checked ? 'block' : 'none';
+    });
+  }
+
+  // Render items section if needed
+  if (type === QUESTION_TYPES.LEVLQ || type === QUESTION_TYPES.OPTSQ) {
+    renderItemsSection(type);
+  }
+}
+
+function populateTypeSpecificFields(question) {
+  const type = question.QStruct;
+  const details = question.QDetails;
+
+  if (type === QUESTION_TYPES.AORBQ || type === QUESTION_TYPES.TRIPQ) {
+    renderLanguageField('qPref1', details.QPref1);
+    renderLanguageField('qPref2', details.QPref2);
+    renderLanguageField('qPrefer1', details.QPrefer1);
+    renderLanguageField('qPrefer2', details.QPrefer2);
+
+    if (type === QUESTION_TYPES.TRIPQ) {
+      renderLanguageField('qMidP', details.QMidP);
+      renderLanguageField('qMiddle', details.QMiddle);
+    }
+  }
+
+  if (type === QUESTION_TYPES.LIKSQ) {
+    renderLanguageField('qPos', details.QPos);
+  }
+
+  if (type === QUESTION_TYPES.LEVLQ) {
+    setChecked('qSchB', details.QSchB);
+    document.getElementById('schemeFieldContainer').style.display = details.QSchB ? 'block' : 'none';
+    setValue('qScheme', details.QScheme);
+    if (details.items && details.items.length > 0) {
+      renderItemsWithData(question);
+    }
+  }
+
+  if (type === QUESTION_TYPES.OPTSQ) {
+    setChecked('qMultiB', details.QMultiB);
+    setChecked('qOtherB', details.QOtherB);
+    if (details.items && details.items.length > 0) {
+      renderItemsWithData(question);
+    }
+  }
+
+  if (type === QUESTION_TYPES.RANGQ) {
+    setValue('qsUnit', details.QSUnit);
+    setValue('qsMin', details.QSMin);
+    setValue('qsMax', details.QSMax);
+    setValue('qsGran', details.QSGran);
+  }
+}
+
+// =============================================================================
+// ITEM MANAGEMENT
+// =============================================================================
+
+function renderItemsSection(type) {
+  const container = document.getElementById('itemsContainer');
+  if (!container) return;
+
+  let html = '<div class="items-section">';
+  html += '<div class="items-header">';
+  html += '<h4>Items</h4>';
+  html += '<button type="button" onclick="addNewItemToForm()" class="btn-add">+ Add Item</button>';
+  html += '</div>';
+  html += '<div id="itemsList"></div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function renderItemsWithData(question) {
+  const items = question.QDetails.items || [];
+  const itemsList = document.getElementById('itemsList');
+  if (!itemsList) return;
+
+  let html = '';
+
+  items.forEach((item, idx) => {
+    html += '<div class="item-box" data-item-index="' + idx + '">';
+    html += '<div class="item-box-header">';
+    html += '<span>Item ' + (idx + 1) + '</span>';
+    
+    if (items.length > 2) {
+      html += '<button type="button" onclick="removeItemFromForm(' + idx + ')" class="btn-danger">Remove</button>';
+    }
+    
+    html += '</div>';
+    html += '<div class="form-group"><label>Short description *</label><div id="item' + idx + 'Short_container"></div></div>';
+    html += '<div class="form-group"><label>Long description</label><div id="item' + idx + 'Long_container"></div></div>';
+    
+    if (question.QStruct === QUESTION_TYPES.LEVLQ) {
+      html += '<div class="form-group"><label>Value</label><input type="number" id="item' + idx + 'Val" value="' + (item.QItemVal || idx + 1) + '"></div>';
+    }
+    
+    html += '</div>';
+  });
+
+  itemsList.innerHTML = html;
+
+  // Render language fields for each item
+  items.forEach((item, idx) => {
+    renderLanguageField('item' + idx + 'Short', item.QItemShort);
+    renderLanguageField('item' + idx + 'Long', item.QItemLong);
+  });
+}
+
+function addNewItemToForm() {
+  const qni = parseInt(document.getElementById('qni').value) || 5;
+  document.getElementById('qni').value = qni + 1;
+
+  const type = document.getElementById('questionType').value;
+  
+  // Create a temporary question to hold the new item structure
+  const tempQuestion = {
+    QStruct: type,
+    Qni: qni + 1,
+    QDetails: {
+      items: []
+    }
+  };
+
+  // Collect existing items
+  for (let i = 0; i < qni; i++) {
+    const itemShort = collectLanguageFieldFromForm('item' + i + 'Short');
+    const itemLong = collectLanguageFieldFromForm('item' + i + 'Long');
+    const item = { QItemShort: itemShort, QItemLong: itemLong };
+    
+    if (type === QUESTION_TYPES.LEVLQ) {
+      item.QItemVal = parseInt(getTrimmedValue('item' + i + 'Val')) || (i + 1);
+    }
+    
+    tempQuestion.QDetails.items.push(item);
+  }
+
+  // Add new empty item
+  const newItem = {
+    QItemShort: createLangField('en'),
+    QItemLong: createLangField('en')
+  };
+  
+  if (type === QUESTION_TYPES.LEVLQ) {
+    newItem.QItemVal = qni + 1;
+  }
+  
+  tempQuestion.QDetails.items.push(newItem);
+
+  // Re-render
+  renderItemsWithData(tempQuestion);
+}
+
+function removeItemFromForm(index) {
+  if (!confirm('Remove this item?')) return;
+
+  const type = document.getElementById('questionType').value;
+  const qni = parseInt(document.getElementById('qni').value) || 5;
+
+  if (qni <= 2) {
+    alert('Must have at least 2 items');
+    return;
+  }
+
+  // Collect all items except the one being removed
+  const tempQuestion = {
+    QStruct: type,
+    Qni: qni - 1,
+    QDetails: { items: [] }
+  };
+
+  for (let i = 0; i < qni; i++) {
+    if (i !== index) {
+      const itemShort = collectLanguageFieldFromForm('item' + i + 'Short');
+      const itemLong = collectLanguageFieldFromForm('item' + i + 'Long');
+      const item = { QItemShort: itemShort, QItemLong: itemLong };
+      
+      if (type === QUESTION_TYPES.LEVLQ) {
+        item.QItemVal = tempQuestion.QDetails.items.length + 1;
+      }
+      
+      tempQuestion.QDetails.items.push(item);
+    }
+  }
+
+  // Update Qni
+  document.getElementById('qni').value = qni - 1;
+
+  // Re-render
+  renderItemsWithData(tempQuestion);
+}
+
+// =============================================================================
+// FORM SUBMISSION
+// =============================================================================
+
+function handleFormSubmit(e) {
+  e.preventDefault();
+
+  const type = document.getElementById('questionType').value;
+  let question;
+
+  // Start with existing question or create new
+  if (app.editingIndex >= 0) {
+    question = app.getQuestion(app.editingIndex);
+  } else {
+    question = createQuestion(type, 'en');
+  }
+
+  // Collect common fields
+  question.QRelB = document.getElementById('qRelB').checked;
+  question.QLearn = getTrimmedValue('qLearn');
+  
+  const enablingQID = getTrimmedValue('enablingQID');
+  question.EnablingQID = enablingQID ? parseInt(enablingQID) : null;
+  question.EnablingAnswers = getTrimmedValue('enablingAnswers') || null;
+
+  // Collect Qni
+  if (type !== QUESTION_TYPES.FACTQ && type !== QUESTION_TYPES.RANGQ) {
+    question.Qni = parseInt(getTrimmedValue('qni')) || 5;
+  }
+
+  // Collect language fields
+  question.QTitle = collectLanguageFieldFromForm('qTitle');
+  question.QDesc = collectLanguageFieldFromForm('qDesc');
+
+  // Collect type-specific fields
+  question.QDetails = collectTypeSpecificDetails(type, question.Qni);
+
+  // Validate
+  const validation = validateQuestion(question);
+  if (!validation.valid) {
+    const msg = 'Validation issues:\\n\\n' + validation.errors.join('\\n') + '\\n\\nSave anyway?';
+    if (!confirm(msg)) return;
+  }
+
+  // Save
+  if (app.editingIndex >= 0) {
+    app.updateQuestion(app.editingIndex, question);
+    showMessage('Question updated');
+  } else {
+    app.addQuestion(question);
+    showMessage('Question created');
+  }
+
+  showView('list');
+}
+
+function collectTypeSpecificDetails(type, qni) {
+  const details = {};
+
+  switch(type) {
+    case QUESTION_TYPES.AORBQ:
+      details.QPref1 = collectLanguageFieldFromForm('qPref1');
+      details.QPref2 = collectLanguageFieldFromForm('qPref2');
+      details.QPrefer1 = collectLanguageFieldFromForm('qPrefer1');
+      details.QPrefer2 = collectLanguageFieldFromForm('qPrefer2');
+      break;
+
+    case QUESTION_TYPES.FACTQ:
+      // No additional details
+      break;
+
+    case QUESTION_TYPES.LEVLQ:
+      details.QSchB = document.getElementById('qSchB').checked;
+      details.QScheme = getTrimmedValue('qScheme');
+      details.items = [];
+      
+      for (let i = 0; i < qni; i++) {
+        details.items.push({
+          QItemShort: collectLanguageFieldFromForm('item' + i + 'Short'),
+          QItemLong: collectLanguageFieldFromForm('item' + i + 'Long'),
+          QItemVal: parseInt(getTrimmedValue('item' + i + 'Val')) || (i + 1)
+        });
+      }
+      break;
+
+    case QUESTION_TYPES.LIKSQ:
+      details.QPos = collectLanguageFieldFromForm('qPos');
+      break;
+
+    case QUESTION_TYPES.OPTSQ:
+      details.QMultiB = document.getElementById('qMultiB').checked;
+      details.QOtherB = document.getElementById('qOtherB').checked;
+      details.items = [];
+      
+      for (let i = 0; i < qni; i++) {
+        details.items.push({
+          QItemShort: collectLanguageFieldFromForm('item' + i + 'Short'),
+          QItemLong: collectLanguageFieldFromForm('item' + i + 'Long')
+        });
+      }
+      break;
+
+    case QUESTION_TYPES.RANGQ:
+      details.QSUnit = getTrimmedValue('qsUnit');
+      details.QSMin = parseFloat(getTrimmedValue('qsMin'));
+      details.QSMax = parseFloat(getTrimmedValue('qsMax'));
+      details.QSGran = parseFloat(getTrimmedValue('qsGran'));
+      break;
+
+    case QUESTION_TYPES.TRIPQ:
+      details.QPref1 = collectLanguageFieldFromForm('qPref1');
+      details.QPref2 = collectLanguageFieldFromForm('qPref2');
+      details.QMidP = collectLanguageFieldFromForm('qMidP');
+      details.QPrefer1 = collectLanguageFieldFromForm('qPrefer1');
+      details.QPrefer2 = collectLanguageFieldFromForm('qPrefer2');
+      details.QMiddle = collectLanguageFieldFromForm('qMiddle');
+      break;
+  }
+
+  return details;
+}
