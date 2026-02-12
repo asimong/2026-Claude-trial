@@ -532,6 +532,11 @@ function resetForm() {
   document.getElementById('questionForm').reset();
   document.getElementById('formTitle').textContent = 'Create New Question';
   document.getElementById('submitBtn').textContent = 'Create Question';
+
+  // Initialize language fields for new question
+  renderLanguageField('qTitle', createLangField('en'));
+  renderLanguageField('qDesc', createLangField('en'));
+
   updateFormForQuestionType(document.getElementById('questionType').value);
 }
 
@@ -547,8 +552,8 @@ function populateForm(question) {
   }
 
   // Populate language fields
-  populateLanguageField('qTitle', question.QTitle);
-  populateLanguageField('qDesc', question.QDesc);
+  renderLanguageField('qTitle', question.QTitle);
+  renderLanguageField('qDesc', question.QDesc);
 
   updateFormForQuestionType(question.QStruct);
 
