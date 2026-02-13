@@ -184,6 +184,11 @@ function setupEventListeners() {
   // Form submission
   document.getElementById('questionForm').addEventListener('submit', handleFormSubmit);
 
+  // "Save with new QID" button
+  document.getElementById('saveNewQIDBtn').addEventListener('click', () => {
+    handleFormSubmit(null, true); // true = force new QID
+  });
+
   // Local file operations
   document.getElementById('saveLocalBtn').addEventListener('click', () => {
     app.saveToFile(app.currentFilename);
@@ -414,6 +419,9 @@ function editQuestion(index) {
 
   document.getElementById('formTitle').textContent = 'Edit Question';
   document.getElementById('submitBtn').textContent = 'Save Edit';
+
+  // Show "Save with new QID" button when editing
+  document.getElementById('saveNewQIDBtn').style.display = 'inline-block';
 }
 
 function viewQuestion(index) {
@@ -532,6 +540,9 @@ function resetForm() {
   document.getElementById('questionForm').reset();
   document.getElementById('formTitle').textContent = 'Create New Question';
   document.getElementById('submitBtn').textContent = 'Create Question';
+
+  // Hide "Save with new QID" button when creating new
+  document.getElementById('saveNewQIDBtn').style.display = 'none';
 
   // Initialize language fields for new question
   renderLanguageField('qTitle', createLangField('en'));
@@ -834,16 +845,18 @@ function removeItemFromForm(index) {
 // FORM SUBMISSION
 // =============================================================================
 
-function handleFormSubmit(e) {
-  e.preventDefault();
+function handleFormSubmit(e, forceNewQID = false) {
+  if (e) e.preventDefault();
 
   const type = document.getElementById('questionType').value;
   let question;
 
   // Start with existing question or create new
-  if (app.editingIndex >= 0) {
+  if (app.editingIndex >= 0 && !forceNewQID) {
+    // Editing: keep existing question (preserves QID)
     question = app.getQuestion(app.editingIndex);
   } else {
+    // Creating new or forcing new QID: create fresh question with new QID
     question = createQuestion(type, 'en');
   }
 
@@ -875,12 +888,18 @@ function handleFormSubmit(e) {
   }
 
   // Save
-  if (app.editingIndex >= 0) {
+  if (app.editingIndex >= 0 && !forceNewQID) {
+    // Update existing question (keeps same QID)
     app.updateQuestion(app.editingIndex, question);
     showMessage('Question updated');
   } else {
+    // Add as new question (new QID)
     app.addQuestion(question);
-    showMessage('Question created');
+    if (forceNewQID) {
+      showMessage('Question saved with new QID: ' + question.QID);
+    } else {
+      showMessage('Question created');
+    }
   }
 
   showView('list');
