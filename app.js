@@ -1,6 +1,6 @@
 /**
  * RegenCHOICE Question Management App
- * Last updated: 2026-02-13T14:30
+ * Last updated: 2026-02-13T14:45
  *
  * This file contains the main application logic for managing questions.
  * It's designed to be simple and easy to modify.
@@ -174,7 +174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupEventListeners() {
   // Navigation links
   document.getElementById('navList').addEventListener('click', () => showView('list'));
-  document.getElementById('navCreate').addEventListener('click', () => showView('create'));
+  document.getElementById('navCreate').addEventListener('click', () => {
+    resetForm();  // Reset form when creating new question
+    showView('create');
+  });
   document.getElementById('navValidate').addEventListener('click', () => showView('validate'));
 
   // Question type selector
@@ -286,9 +289,9 @@ function showView(viewName) {
     renderQuestionList();
   } else if (viewName === 'validate') {
     renderValidationView();
-  } else if (viewName === 'create') {
-    resetForm();
   }
+  // Note: We DON'T call resetForm() here anymore, because it would reset
+  // app.editingIndex when we're trying to edit a question!
 
   updateStatusBar();
 }
@@ -861,16 +864,24 @@ function removeItemFromForm(index) {
 function handleFormSubmit(e, forceNewQID = false) {
   if (e) e.preventDefault();
 
+  console.log('=== FORM SUBMIT DEBUG ===');
+  console.log('app.editingIndex:', app.editingIndex);
+  console.log('forceNewQID:', forceNewQID);
+
   const type = document.getElementById('questionType').value;
   let question;
 
   // Start with existing question or create new
   if (app.editingIndex >= 0 && !forceNewQID) {
     // Editing: make a COPY of existing question (preserves QID)
-    question = JSON.parse(JSON.stringify(app.getQuestion(app.editingIndex)));
+    const originalQuestion = app.getQuestion(app.editingIndex);
+    console.log('Editing existing question, original QID:', originalQuestion.QID);
+    question = JSON.parse(JSON.stringify(originalQuestion));
+    console.log('After copy, QID:', question.QID);
   } else {
     // Creating new or forcing new QID: create fresh question with new QID
     question = createQuestion(type, 'en');
+    console.log('Created NEW question with QID:', question.QID);
   }
 
   // Collect common fields
@@ -901,19 +912,25 @@ function handleFormSubmit(e, forceNewQID = false) {
   }
 
   // Save
+  console.log('Before save, question QID:', question.QID);
+  console.log('Saving path:', app.editingIndex >= 0 && !forceNewQID ? 'UPDATE' : 'ADD NEW');
+
   if (app.editingIndex >= 0 && !forceNewQID) {
     // Update existing question (keeps same QID)
     app.updateQuestion(app.editingIndex, question);
-    showMessage('Question updated');
+    console.log('Updated question at index', app.editingIndex, 'with QID:', question.QID);
+    showMessage('Question updated (QID: ' + question.QID + ')');
   } else {
     // Add as new question (new QID)
     app.addQuestion(question);
+    console.log('Added new question with QID:', question.QID);
     if (forceNewQID) {
       showMessage('Question saved with new QID: ' + question.QID);
     } else {
       showMessage('Question created');
     }
   }
+  console.log('=== END SUBMIT DEBUG ===');
 
   showView('list');
 }
