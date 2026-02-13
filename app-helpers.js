@@ -1,5 +1,6 @@
 /**
  * Helper Functions for RegenCHOICE App
+ * Last updated: 2026-02-13T14:30
  *
  * This file contains UI helper functions to keep app.js cleaner.
  * Includes language field management and form utilities.
