@@ -1,5 +1,6 @@
 /**
  * RegenCHOICE Question Data Structures
+ * Last updated: 2026-02-13T14:30
  *
  * This file defines the structure for RegenCHOICE questions.
  * Language-dependent fields are stored as objects with language codes as keys.
