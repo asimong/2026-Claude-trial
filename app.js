@@ -548,6 +548,13 @@ function resetForm() {
   renderLanguageField('qTitle', createLangField('en'));
   renderLanguageField('qDesc', createLangField('en'));
 
+  // Set default Qni value explicitly
+  const typeField = document.getElementById('questionType');
+  const type = typeField.value;
+  if (type !== QUESTION_TYPES.FACTQ && type !== QUESTION_TYPES.RANGQ) {
+    document.getElementById('qni').value = 5; // Default value
+  }
+
   updateFormForQuestionType(document.getElementById('questionType').value);
 }
 
@@ -581,12 +588,17 @@ function populateForm(question) {
 function updateFormForQuestionType(type) {
   const container = document.getElementById('typeSpecificFields');
   const qniContainer = document.getElementById('qniContainer');
+  const qniInput = document.getElementById('qni');
 
-  // Show/hide Qni based on type
+  // Show/hide Qni based on type, and set default value if creating new
   if (type === QUESTION_TYPES.FACTQ || type === QUESTION_TYPES.RANGQ) {
     qniContainer.style.display = 'none';
   } else {
     qniContainer.style.display = 'block';
+    // Set default Qni if field is empty or creating new
+    if (app.editingIndex < 0 && (!qniInput.value || qniInput.value === '0')) {
+      qniInput.value = 5;
+    }
   }
 
   let html = '';
@@ -853,8 +865,8 @@ function handleFormSubmit(e, forceNewQID = false) {
 
   // Start with existing question or create new
   if (app.editingIndex >= 0 && !forceNewQID) {
-    // Editing: keep existing question (preserves QID)
-    question = app.getQuestion(app.editingIndex);
+    // Editing: make a COPY of existing question (preserves QID)
+    question = JSON.parse(JSON.stringify(app.getQuestion(app.editingIndex)));
   } else {
     // Creating new or forcing new QID: create fresh question with new QID
     question = createQuestion(type, 'en');
