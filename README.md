@@ -1,4 +1,4 @@
-# RegenCHOICE Question Management App
+# CHOICEinCommon Question Management App
 
 A web-based application for creating, managing, and validating questions for the RegenCHOICE matching system.
 
